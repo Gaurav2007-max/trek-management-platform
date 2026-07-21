@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+</head>
+<body>
+    <div> 
+        <form action="/register" method="POST">
+            <label for="fullname">Fullname:</label>
+            <input type="text" id="fullname" name="Fullname">
+            <br><br>
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="Email">
+            <br><br>
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="Password">
+            <br><br>
+            <label for="password2">Confirm Password:</label>
+            <input type="password" id="password2" name="Password2">
+            <br><br>
+            <label for="contact">Contact:</label>
+            <input type="text" id="contact" name="Contact">
+            <br><br>
+            I am a <label for="role"></label>
+            <select name="Role" id="role">
+                <option value="Staff">Trek Staff</option>
+                <option value="Trekker">Trekker</option>
+            </select>
+            <div><input type="submit" value="submit"></div>
+        </form>
+        <br><br>
+        <div><a href="/">Already Registered? Login Here</a></div>
+    </div>
+</body>
+</html>

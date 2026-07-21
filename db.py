@@ -9,7 +9,8 @@ cursor.execute("""Create table User (
                FullName TEXT,
                UserEmail TEXT,
                UserPassword TEXT,
-               UserRole TEXT);""")
+               UserRole TEXT,
+               Contact TEXT);""")
 
 cursor.execute("""Create table Trek (
                TrekId INTEGER PRIMARY KEY autoincrement,
@@ -35,15 +36,14 @@ cursor.execute("""Create table Booking (
                );""")
 
 cursor.execute("""Create table StaffReq (
-               StaffId INTEGER PRIMARY KEY,
+               ReqId INTEGER PRIMARY KEY autoincrement,
                Name TEXT,
                Email TEXT,
                Contact TEXT,
-               Status TEXT,
-               FOREIGN KEY(StaffId) REFERENCES User(UserId)
+               Password TEXT
                );""")
 
-cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroragnesh2007@gmail.com","2026","Admin");""")
+cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","2026","Admin",Null);""")
 
 conn.commit()
 conn.close()
