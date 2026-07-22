@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for,flash
 import sqlite3 
 
 app=Flask(__name__)
@@ -7,6 +7,7 @@ conn = sqlite3.connect(
     check_same_thread=False
 )
 cursor=conn.cursor()
+app.secret_key="trekker"
 
 @app.route('/login',methods={"GET","POST"})
 @app.route('/',methods={"GET","POST"})
@@ -24,6 +25,7 @@ def login():
             else:
                 return render_template("userDashboard.html",userinfo=userInfo)
         else:
+            flash("Invalid username or password", "error")
             return redirect("login")
         
     return render_template("login.html")
@@ -38,14 +40,17 @@ def register():
         contact=request.form.get("Contact")
         role=request.form.get("Role")
         if(password!=password2):
+            flash("Please enter same password for confirmation","warning")
             return redirect('register')
         if(role=="Trekker"):
             cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,?,?)",(None,name,email,password,role,contact))
             conn.commit()
+            flash("Successfully registered as Trekker","success")
             return redirect('login')
         else:
             cursor.execute("Insert into StaffReq (ReqId,Name,Email,Contact,Password) values(?,?,?,?,?)",(None,name,email,contact,password))
             conn.commit()
+            flash("Request Sent to Admin, You can login once admin approves","success")
             return redirect('/')
     return render_template("register.html")
 

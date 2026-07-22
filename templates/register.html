@@ -7,6 +7,13 @@
 </head>
 <body>
     <div> 
+        {% with messages=get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for message in messages %}
+        {{message}}
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
         <form action="/register" method="POST">
             <label for="fullname">Fullname:</label>
             <input type="text" id="fullname" name="Fullname">
