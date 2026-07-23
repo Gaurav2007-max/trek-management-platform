@@ -14,14 +14,16 @@ cursor.execute("""Create table User (
 
 cursor.execute("""Create table Trek (
                TrekId INTEGER PRIMARY KEY autoincrement,
-               TrekName TEXT,
+               TrekName TEXT Not Null,
                Difficulty TEXT,
                Location TEXT,
-               Duration TEXT,
+               Duration_HRS INTEGER,
+               StartDate DATE,
+               EndDate DATE,
                Slot INTEGER,
                StaffId INTEGER,
-               Status text,
-               FOREIGN KEY(StaffId) REFERENCES User("UserId")
+               Status TEXT,
+               FOREIGN KEY(StaffId) REFERENCES User(UserId)
                );""")
 
 cursor.execute("""Create table Booking (
@@ -42,6 +44,12 @@ cursor.execute("""Create table StaffReq (
                Contact TEXT,
                Password TEXT
                );""")
+
+cursor.execute("""Create table History (
+                HistoryId INTEGER Primary Key autoincrement,
+                TrekId INTEGER,
+                StaffId INTEGER
+                );""")
 
 cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","2026","Admin",Null);""")
 

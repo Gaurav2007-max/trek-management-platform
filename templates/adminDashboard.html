@@ -1,11 +1,54 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    Welcome Admin!
-</body>
-</html>
+{% extends "adminLayout.html" %}
+
+{% block content %}
+<h2>Welcome</h2>
+<p>Heloo.......................</p>
+<img src={{url_for('static',filename='i1.jpg')}} alt="Trek Image">
+
+<div>
+    <div>
+        <H4>Total Treks</H4>
+        <p></p>
+    </div>
+    <div>
+        <H4>Registered Users</H4>
+        <p></p>
+    </div>
+    <div>
+        <H4>Total Staff</H4>
+        <p></p>
+    </div>
+    <div>
+        <H4>Total Bookings</H4>
+        <p></p>
+    </div>
+
+    <div>
+        {% if bookings %}
+        <H3>Recent Bookings</H3>
+        <table border="1px">
+            <tr>
+                <th>Booking Id</th>
+                <th>User</th>
+                <th>Trek</th>
+                <th>Booking Date</th>
+                <th>Booking Status</th>
+            </tr>
+            {% for booking in bookings %}
+            <tr>
+                <td>{{booking.id}}</td>
+                <td>{{booking.user}}</td>
+                <td>{{booking.trek}}</td>
+                <td>{{booking.date}}</td>
+                <td>{{booking.status}}</td>
+            </tr>
+            {% endfor %}
+        {% else %}
+        <H3>No Recent bookings</H3>
+        {% endif %}
+        </table>
+        <a href="/adminBookings">View all Bookings</a>
+    </div>
+</div>
+
+{% endblock %}

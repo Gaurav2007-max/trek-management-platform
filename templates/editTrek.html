@@ -1,0 +1,40 @@
+{% extends "adminLayout.html" %}
+{% block content %}
+<form action="/editTrek" method="POST">
+    <label for="TrekName">Trek Name</label>
+    <input type="text" name="Trekname" id="TrekName" value="{{Trek.id}}">
+
+    <label for="Difficulty">Difficulty</label>
+    <Select id="Difficulty" name="Difficulty" value="{{Trek.Difficulty}}">
+        <option value="Easy">Easy</option>
+        <option value="Moderate">Moderate</option>
+        <option value="Hard">Hard</option>
+    </Select>        
+    
+    <label for="Location">Location</label>
+    <input type="text" name="Location" id="Location" value="{{Trek.Location}}">
+
+    <label for="Duration">Duration(in hrs)</label>
+    <input type="number" name="Duration" id="Duration" value="{{Trek.Duration}}">
+
+    <label for="Start">Start Date</label>
+    <input type="date" name="sDate" id="Start" value="{{Trek.StartDate}}">
+
+    <label for="End">End Date</label>
+    <input type="date" name="eDate" id="End" value="{{Trek.EndDate}}">
+
+    <label for="Slot">Slots</label>
+    <input type="number" name="Slot" id="Slot" value="{{Trek.Slot}}">
+
+    <label for="Staff">Staff ID</label>
+    <input type="number" name="StaffId" id="Staff" value="{{Trek.Staff}}">
+
+    <label for="Status">Status</label>
+    <input type="text" name="Status" id="Status" value="{{Trek.Status}}">
+    
+    <a href="/admintreks">Cancel</a>
+    
+    <input type="submit" value="Save">
+
+</form>
+{% endblock %}

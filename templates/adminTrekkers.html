@@ -1,0 +1,30 @@
+{% extends "adminLayout.html" %}
+{% block content %}
+<form action="/search" method="POST">
+    <label for="parameter"></label>
+    <input type="Text" name="NameorId" id="parameter" placeholder="Enter UserId or name">
+    <input type="submit" value="Search">
+</form>
+<table border="1px">
+    {% if users %}
+        <tr>
+            <th>UserId</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Contact</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{user.UserId}}</td>
+            <td>{{user.Name}}</td>
+            <td>{{user.Email}}</td>
+            <td>{{user.Contact}}</td>
+            <td><a href='/blacklist/{{user.UserId}}'>BlackList</a></td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <h3>No current Users</h3>
+    {% endif %}
+</table>
+{% endblock %}

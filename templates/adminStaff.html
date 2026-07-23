@@ -1,0 +1,58 @@
+{% extends "adminLayout.html" %}
+{% block content %}
+<form action="/search" method="POST">
+    <label for="parameter"></label>
+    <input type="Text" name="NameorId" id="parameter" placeholder="Enter Id or name">
+    <input type="submit" value="Search">
+</form>
+<table border="1px">
+    {% if staffs %}
+        <tr>
+            <th>StaffId</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Contact</th>
+            <th>Actions</th>
+        </tr>
+        {% for staff in staffs %}
+        <tr>
+            <td>{{staff.UserId}}</td>
+            <td>{{staff.Name}}</td>
+            <td>{{staff.Email}}</td>
+            <td>{{staff.Contact}}</td>
+            <td>
+                <a href='/blacklist/{{staff.UserId}}'>BlackList</a>
+                <a href="/assign/{{staff.UserId}}">Assign new Treks</a>
+            </td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <h3>No current Staffs</h3>
+    {% endif %}
+</table>
+<table>
+    {% if reqstaffs %}
+        <tr>
+            <th>ReqId</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Contact</th>
+            <th>Actions</th>
+        </tr>
+        {% for reqstaff in reqstaffs %}
+        <tr>
+            <td>{{reqstaff.ReqId}}</td>
+            <td>{{reqstaff.Name}}</td>
+            <td>{{reqstaff.Email}}</td>
+            <td>{{reqstaff.Contact}}</td>
+            <td>
+                <a href='/approve/{{reqstaff.ReqId}}'>Approve</a>
+                <a href="/reject/{{reqstaff.ReqId}}">Reject</a>
+            </td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <h3>No current Staff Request<h3>
+    {% endif %}
+</table>
+{% endblock %}

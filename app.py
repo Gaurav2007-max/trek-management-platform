@@ -2,21 +2,19 @@ from flask import Flask, render_template, request, redirect, url_for,flash
 import sqlite3 
 
 app=Flask(__name__)
-conn = sqlite3.connect(
-    "TrekManagement.db",
-    check_same_thread=False
-)
-cursor=conn.cursor()
 app.secret_key="trekker"
 
 @app.route('/login',methods={"GET","POST"})
 @app.route('/',methods={"GET","POST"})
 def login():
     if(request.method=="POST"):
+        conn = sqlite3.connect("TrekManagement.db")
+        cursor=conn.cursor()
         username=request.form.get("Username")
         password=request.form.get("Password")
         cursor.execute("Select * from User where UserEmail=? AND UserPassword=?",(username,password))
         userInfo=cursor.fetchone()
+        conn.close()
         if(userInfo):
             if(userInfo[4]=="Admin"):
                 return render_template("adminDashboard.html",userinfo=userInfo)
@@ -28,11 +26,14 @@ def login():
             flash("Invalid username or password", "error")
             return redirect("login")
         
+        
     return render_template("login.html")
 
 @app.route('/register',methods={"GET","POST"})
 def register():
     if(request.method=="POST"):
+        conn = sqlite3.connect("TrekManagement.db")
+        cursor=conn.cursor()
         name=request.form.get("Fullname")
         email=request.form.get("Email")
         password=request.form.get("Password")
@@ -41,18 +42,22 @@ def register():
         role=request.form.get("Role")
         if(password!=password2):
             flash("Please enter same password for confirmation","warning")
+            conn.close()
             return redirect('register')
         if(role=="Trekker"):
             cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,?,?)",(None,name,email,password,role,contact))
             conn.commit()
+            conn.close()
             flash("Successfully registered as Trekker","success")
             return redirect('login')
         else:
             cursor.execute("Insert into StaffReq (ReqId,Name,Email,Contact,Password) values(?,?,?,?,?)",(None,name,email,contact,password))
             conn.commit()
+            conn.close()
             flash("Request Sent to Admin, You can login once admin approves","success")
             return redirect('/')
+        
     return render_template("register.html")
 
-if __name__=="__main__":
-    app.run()
+if __name__ == "__main__":
+    app.run(debug=True)
