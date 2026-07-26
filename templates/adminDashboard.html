@@ -8,19 +8,19 @@
 <div>
     <div>
         <H4>Total Treks</H4>
-        <p></p>
+        <p>{{TotalTreks}}</p>
     </div>
     <div>
         <H4>Registered Users</H4>
-        <p></p>
+        <p>{{TotalUsers}}</p>
     </div>
     <div>
         <H4>Total Staff</H4>
-        <p></p>
+        <p>{{TotalStaff}}</p>
     </div>
     <div>
         <H4>Total Bookings</H4>
-        <p></p>
+        <p>{{TotalBookings}}</p>
     </div>
 
     <div>
@@ -31,16 +31,16 @@
                 <th>Booking Id</th>
                 <th>User</th>
                 <th>Trek</th>
-                <th>Booking Date</th>
                 <th>Booking Status</th>
+                <th>Booking Date</th>
             </tr>
             {% for booking in bookings %}
             <tr>
-                <td>{{booking.id}}</td>
-                <td>{{booking.user}}</td>
-                <td>{{booking.trek}}</td>
-                <td>{{booking.date}}</td>
-                <td>{{booking.status}}</td>
+                <td>{{booking[0]}}</td>
+                <td>{{booking[1]}}</td>
+                <td>{{booking[2]}}</td>
+                <td>{{booking[3]}}</td>
+                <td>{{booking[4]}}</td>
             </tr>
             {% endfor %}
         {% else %}
@@ -50,5 +50,4 @@
         <a href="/adminBookings">View all Bookings</a>
     </div>
 </div>
-
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends "adminLayout.html" %}
 {% block content %}
-<form action="/search" method="POST">
+<form action="/searchUser" method="POST">
     <label for="parameter"></label>
     <input type="Text" name="NameorId" id="parameter" placeholder="Enter UserId or name">
     <input type="submit" value="Search">
@@ -16,11 +16,11 @@
         </tr>
         {% for user in users %}
         <tr>
-            <td>{{user.UserId}}</td>
-            <td>{{user.Name}}</td>
-            <td>{{user.Email}}</td>
-            <td>{{user.Contact}}</td>
-            <td><a href='/blacklist/{{user.UserId}}'>BlackList</a></td>
+            <td>{{user[0]}}</td>
+            <td>{{user[1]}}</td>
+            <td>{{user[2]}}</td>
+            <td>{{user[5]}}</td>
+            <td><a href='/blacklist/{{user[0]}}'>BlackList</a></td>
         </tr>
         {% endfor %}
     {% else %}

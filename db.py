@@ -41,8 +41,8 @@ cursor.execute("""Create table StaffReq (
                ReqId INTEGER PRIMARY KEY autoincrement,
                Name TEXT,
                Email TEXT,
-               Contact TEXT,
-               Password TEXT
+               Password TEXT,
+               Contact TEXT
                );""")
 
 cursor.execute("""Create table History (
@@ -50,6 +50,7 @@ cursor.execute("""Create table History (
                 TrekId INTEGER,
                 StaffId INTEGER
                 );""")
+
 
 cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","2026","Admin",Null);""")
 

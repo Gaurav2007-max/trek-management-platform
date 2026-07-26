@@ -1,6 +1,6 @@
 {% extends "adminLayout.html" %}
 {% block content %}
-<form action="/search" method="POST">
+<form action="/searchBooking" method="POST">
 
     <label for="parameter"></label>
     <input type="Text" name="NameorId" id="parameter" placeholder="Enter UserId or name">
@@ -8,31 +8,41 @@
     <label for="SearchBy">Search By:</label>
     <select id="SearchBy" name="SearchBy">
         <option value="BookingID">Booking Id</option>
-        <option value="TrekID">Trek Id</option>
-        <option value="StaffID">Staff Id</option>
+        <option value="TrekIDorName">Trek Id or Name</option>
+        <option value="StaffIDorName">Staff Id orName</option>
+        <option value="UserIDorName">User Id or Name</option>
+
     </select>
-
     <input type="submit" value="Search">
-
 </form>
 <table border="1px">
     {% if bookings %}
         <tr>
             <th>Booking Id</th>
-            <th>Trek Id</th>
-            <th>Trek Name</th>
-            <th>Staff Id</th>
-            <th>User Id</th>
+            <th>Trek</th>
+            <th>Staff</th>
+            <th>User</th>
             <th>Status</th>
         </tr>
         {% for booking in bookings %}
         <tr>
-            <td>{{booking.BookingId}}</td>
-            <td>{{booking.TrekId}}</td>
-            <td>{{booking.TrekName}}</td>
-            <td>{{booking.StaffId}}</td>
-            <td>{{booking.UserId}}</td>
-            <td>{{booking.Status}}</td>
+            <td>{{booking[0]}}</td>
+            <td>
+                {{booking[1]}}
+                <br>
+                {{booking[2]}}
+            </td>
+            <td>
+                {{booking[3]}}
+                <br>
+                {{booking[4]}}
+            </td>
+            <td>
+                {{booking[5]}}
+                <br>
+                {{booking[6]}}
+            </td>
+            <td>{{booking[7]}}</td>
         </tr>
         {% endfor %}
     {% else %}

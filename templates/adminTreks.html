@@ -18,21 +18,23 @@
                 <th>Location</th>
                 <th>Duration</th>
                 <th>Slots</th>
+                <th>StaffId</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
             {% for trek in treks %}
             <tr>
-                <td>{{trek.TrekId}}</td>
-                <td>{{trek.Name}}</td>
-                <td>{{trek.Difficulty}}</td>
-                <td>{{trek.Location}}</td>
-                <td>{{trek.Duration}}</td>
-                <td>{{trek.Slots}}</td>
-                <td>{{trek.Status}}</td>
+                <td>{{trek[0]}}</td>
+                <td>{{trek[1]}}</td>
+                <td>{{trek[2]}}</td>
+                <td>{{trek[3]}}</td>
+                <td>{{trek[4]}}</td>
+                <td>{{trek[7]}}</td>
+                <td>{{trek[8]}}</td>
+                <td>{{trek[9]}}</td>
                 <td>
-                    <a href='/editTrek/{{trek.TrekId}}'>Edit</a>
-                    <a href="/removeTrek/{{trek.TrekId}}">Remove</a>
+                    <a href='/editTrek/{{trek[0]}}'>Edit</a>
+                    <a href="/removeTrek/{{trek[0]}}">Remove</a>
                 </td>
             </tr>
             {% endfor %}

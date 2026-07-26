@@ -1,6 +1,6 @@
 {% extends "adminLayout.html" %}
 {% block content %}
-<form action="/search" method="POST">
+<form action="/searchStaff" method="POST">
     <label for="parameter"></label>
     <input type="Text" name="NameorId" id="parameter" placeholder="Enter Id or name">
     <input type="submit" value="Search">
@@ -16,13 +16,12 @@
         </tr>
         {% for staff in staffs %}
         <tr>
-            <td>{{staff.UserId}}</td>
-            <td>{{staff.Name}}</td>
-            <td>{{staff.Email}}</td>
-            <td>{{staff.Contact}}</td>
+            <td>{{staff[0]}}</td>
+            <td>{{staff[1]}}</td>
+            <td>{{staff[2]}}</td>
+            <td>{{staff[5]}}</td>
             <td>
-                <a href='/blacklist/{{staff.UserId}}'>BlackList</a>
-                <a href="/assign/{{staff.UserId}}">Assign new Treks</a>
+                <a href='/blacklistS/{{staff[0]}}'>BlackList</a>
             </td>
         </tr>
         {% endfor %}
@@ -41,18 +40,18 @@
         </tr>
         {% for reqstaff in reqstaffs %}
         <tr>
-            <td>{{reqstaff.ReqId}}</td>
-            <td>{{reqstaff.Name}}</td>
-            <td>{{reqstaff.Email}}</td>
-            <td>{{reqstaff.Contact}}</td>
+            <td>{{reqstaff[0]}}</td>
+            <td>{{reqstaff[1]}}</td>
+            <td>{{reqstaff[2]}}</td>
+            <td>{{reqstaff[4]}}</td>
             <td>
-                <a href='/approve/{{reqstaff.ReqId}}'>Approve</a>
-                <a href="/reject/{{reqstaff.ReqId}}">Reject</a>
+                <a href='/approve/{{reqstaff[0]}}'>Approve</a>
+                <a href="/reject/{{reqstaff[0]}}">Reject</a>
             </td>
         </tr>
         {% endfor %}
     {% else %}
-        <h3>No current Staff Request<h3>
+        <h3>No current Staff Request</h3>
     {% endif %}
 </table>
 {% endblock %}
