@@ -23,7 +23,7 @@ cursor.execute("""Create table Trek (
                Slot INTEGER,
                StaffId INTEGER,
                Status TEXT,
-               FOREIGN KEY(StaffId) REFERENCES User(UserId)
+               FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
                );""")
 
 cursor.execute("""Create table Booking (
@@ -33,8 +33,8 @@ cursor.execute("""Create table Booking (
                BookingStatus TEXT,
                BookingDate TEXT,
                PaymentStatus TEXT,
-               FOREIGN KEY(UserId) REFERENCES User("UserId"),
-               FOREIGN KEY(TrekId) REFERENCES Trek("TrekId")
+               FOREIGN KEY(UserId) REFERENCES User("UserId") ON DELETE CASCADE,
+               FOREIGN KEY(TrekId) REFERENCES Trek("TrekId") ON DELETE CASCADE
                );""")
 
 cursor.execute("""Create table StaffReq (

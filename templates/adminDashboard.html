@@ -3,7 +3,7 @@
 {% block content %}
 <h2>Welcome</h2>
 <p>Heloo.......................</p>
-<img src={{url_for('static',filename='i1.jpg')}} alt="Trek Image">
+<img src="{{url_for('static',filename='i1.jpg')}}" alt="Trek Image">
 
 <div>
     <div>
@@ -24,7 +24,7 @@
     </div>
 
     <div>
-        {% if bookings %}
+        {% if Bookings %}
         <H3>Recent Bookings</H3>
         <table border="1px">
             <tr>
@@ -34,7 +34,7 @@
                 <th>Booking Status</th>
                 <th>Booking Date</th>
             </tr>
-            {% for booking in bookings %}
+            {% for booking in Bookings %}
             <tr>
                 <td>{{booking[0]}}</td>
                 <td>{{booking[1]}}</td>
@@ -43,10 +43,11 @@
                 <td>{{booking[4]}}</td>
             </tr>
             {% endfor %}
+        </table>
         {% else %}
         <H3>No Recent bookings</H3>
         {% endif %}
-        </table>
+        
         <a href="/adminBookings">View all Bookings</a>
     </div>
 </div>

@@ -5,7 +5,7 @@
     <input type="text" name="Trekname" id="TrekName" value="{{trek[1]}}">
 
     <label for="Difficulty">Difficulty</label>
-    <Select id="Difficulty" name="Difficulty" value="{{trek[2]}}">
+    <Select id="Difficulty" name="Difficulty">
         <option value="Easy" {% if trek[2]=='Easy' %}selected{% endif %}>Easy</option>
         <option value="Moderate"{% if trek[2]=='Moderate' %}selected{% endif %}>Moderate</option>
         <option value="Hard" {% if trek[2]=='Hard' %}selected{% endif %}>Hard</option>
@@ -32,7 +32,7 @@
     <label for="Status">Status</label>
     <input type="text" name="Status" id="Status" value="{{trek[9]}}">
     
-    <a href="/admintreks">Cancel</a>
+    <a href="/adminTreks">Cancel</a>
     <input type="submit" value="Save">
 
 </form>

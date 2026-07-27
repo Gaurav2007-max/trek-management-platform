@@ -1,22 +1,22 @@
 {% extends "adminLayout.html" %}
 {% block content %}
-<form action="/searchBooking" method="POST">
+<form action="/adminBookings" method="POST">
 
     <label for="parameter"></label>
-    <input type="Text" name="NameorId" id="parameter" placeholder="Enter UserId or name">
+    <input type="Text" name="NameorId" id="parameter" placeholder="Enter Id or name">
 
     <label for="SearchBy">Search By:</label>
     <select id="SearchBy" name="SearchBy">
-        <option value="BookingID">Booking Id</option>
-        <option value="TrekIDorName">Trek Id or Name</option>
-        <option value="StaffIDorName">Staff Id orName</option>
-        <option value="UserIDorName">User Id or Name</option>
+        <option value="BookingId">Booking Id</option>
+        <option value="TrekIdorName">Trek Id or Name</option>
+        <option value="StaffIdorName">Staff Id orName</option>
+        <option value="UserIdorName">User Id or Name</option>
 
     </select>
     <input type="submit" value="Search">
 </form>
-<table border="1px">
     {% if bookings %}
+    <table border="1px">
         <tr>
             <th>Booking Id</th>
             <th>Trek</th>
@@ -45,8 +45,8 @@
             <td>{{booking[7]}}</td>
         </tr>
         {% endfor %}
+    </table>
     {% else %}
-        <h3>No current Users</h3>
+        <h3>No current Bookings</h3>
     {% endif %}
-</table>
 {% endblock %}
