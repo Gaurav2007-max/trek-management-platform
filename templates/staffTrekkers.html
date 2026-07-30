@@ -1,0 +1,40 @@
+{% extends "staffLayout.html" %}
+{% block content %}
+
+{% if aTreks %}
+Assigned Treks<br>
+{% for aTrek in aTreks %}
+{{aTrek[2]}}
+<table>
+    <tr>
+        <th>Participant Name</th>
+        <th>Email</th>
+        <th>Contact</th>
+        <th>Action</th>
+    </tr>
+    {% set matched=[] %}
+    {% for trekker in Trekkers %}
+    {% if trekker[0]==aTrek[0] %}
+    {% set anyP="True" %}
+    <tr>
+        <td>{{trekker[3]}}</td>
+        <td>{{trekker[4]}}</td>
+        <td>{{trekker[5]}}</td>
+        <td><a href="/removeParticipant/{{trekker[1]}}/{{trekker[0]}}">Manage</a></td>
+        {% if matched.append(trekker[1]) %}{% endif %}
+    </tr>
+    {% endif %}
+    {% endfor %}
+    {% if matched|length==0 %}
+    <tr>
+        <td colspan="4">No Participants for this trek</td>
+    </tr>
+    {% endif %}
+</table>
+{% endfor %}
+{% else %}
+No Trek Assigned
+{% endif %}
+{% endblock %}
+
+

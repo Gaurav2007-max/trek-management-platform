@@ -1,0 +1,14 @@
+{% extends "staffLayout.html" %}
+{% block content %}
+
+{% if aTreks %}
+{% for aTrek in aTreks %}
+{{aTrek[1]}}
+<a href="/trekDetailS/{{aTrek[0]}}">View Details</a>
+<a href="/manageTrekS/{{aTrek[0]}}">Update</a>
+{% else %}
+No Treks Assigned to you
+{% endfor %}
+{% endif %}
+
+{% endblock %}

@@ -1,11 +1,35 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    Welcome Staff
-</body>
-</html>
+{% extends "staffLayout.html" %}
+{% block content %}
+
+Welcome {{UserInfo[1]}}
+<div>
+    <div>Assigned Treks:<Br>{{a}}</div>
+    <div>Total Participants:<Br>{{p}}</div>
+    <div>Completed Treks:<Br>{{c}}</div>
+</div>
+{% if aTreks %}
+Assigned Treks<br>
+<table>
+    <tr>
+        <th>Trek Name</th>
+        <th>Location</th>
+        <th>Participants</th>
+        <th>Slots</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+    {% for aTrek in aTreks %}
+    <tr>
+        <td>{{aTrek[1]}}</td>
+        <td>{{aTrek[2]}}</td>
+        <td>{{aTrek[3]}}</td>
+        <td>{{aTrek[4]}}</td>
+        <td>{{aTrek[5]}}</td>
+        <td><a href="/manageTrekS/{{aTrek[0]}}">Manage</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+No Treks Assigned to you
+{% endif %}
+{% endblock %}

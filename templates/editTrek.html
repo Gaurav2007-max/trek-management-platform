@@ -5,11 +5,11 @@
     <input type="text" name="Trekname" id="TrekName" value="{{trek[1]}}">
 
     <label for="Difficulty">Difficulty</label>
-    <Select id="Difficulty" name="Difficulty">
+    <select id="Difficulty" name="Difficulty">
         <option value="Easy" {% if trek[2]=='Easy' %}selected{% endif %}>Easy</option>
         <option value="Moderate"{% if trek[2]=='Moderate' %}selected{% endif %}>Moderate</option>
         <option value="Hard" {% if trek[2]=='Hard' %}selected{% endif %}>Hard</option>
-    </Select>        
+    </select>        
     
     <label for="Location">Location</label>
     <input type="text" name="Location" id="Location" value="{{trek[3]}}">
@@ -30,7 +30,11 @@
     <input type="number" name="StaffId" id="Staff" value="{{trek[8]}}">
 
     <label for="Status">Status</label>
-    <input type="text" name="Status" id="Status" value="{{trek[9]}}">
+    <select name="Status" id="Status">
+        <option value="Open" {% if trek[9] == "Open" %}selected{% endif %}>Open</option>
+        <option value="Closed" {% if trek[9] == "Closed" %}selected{% endif %}>Closed</option>
+        <option value="Ongoing" {% if trek[9] == "Ongoing" %}selected{% endif %}>Ongoing</option>
+    </select>
     
     <a href="/adminTreks">Cancel</a>
     <input type="submit" value="Save">

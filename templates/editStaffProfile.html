@@ -1,0 +1,17 @@
+{% extends "staffLayout.html" %}
+{% block content %}
+<form action="/editStaffProfile" method="POST">
+    <label for="name">Name:</label>
+    <input type="text" name="name" id="name" value="{{Staff[1]}}">
+
+    <label for="email">Email:</label>
+    <input type="email" name="email" id="email" value="{{Staff[2]}}">
+
+    <label for="contact">Contact:</label>
+    <input type="text" name="contact" id="contact" value="{{Staff[3]}}">
+
+    <a href="/staffProfile">Cancel</a>
+    <input type="submit" value="Save">
+</form>
+
+{% endblock %}

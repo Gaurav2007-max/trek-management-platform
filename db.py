@@ -10,7 +10,8 @@ cursor.execute("""Create table User (
                UserEmail TEXT,
                UserPassword TEXT,
                UserRole TEXT,
-               Contact TEXT);""")
+               Contact TEXT
+               );""")
 
 cursor.execute("""Create table Trek (
                TrekId INTEGER PRIMARY KEY autoincrement,
@@ -23,6 +24,7 @@ cursor.execute("""Create table Trek (
                Slot INTEGER,
                StaffId INTEGER,
                Status TEXT,
+               Participants INTEGER Default 0,
                FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
                );""")
 
@@ -33,8 +35,8 @@ cursor.execute("""Create table Booking (
                BookingStatus TEXT,
                BookingDate TEXT,
                PaymentStatus TEXT,
-               FOREIGN KEY(UserId) REFERENCES User("UserId") ON DELETE CASCADE,
-               FOREIGN KEY(TrekId) REFERENCES Trek("TrekId") ON DELETE CASCADE
+               FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
+               FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
                );""")
 
 cursor.execute("""Create table StaffReq (
@@ -46,9 +48,15 @@ cursor.execute("""Create table StaffReq (
                );""")
 
 cursor.execute("""Create table History (
-                HistoryId INTEGER Primary Key autoincrement,
+                BookingId INTEGER,
+                TrekkerId INTEGER,
+                TrekkerName TEXT,
                 TrekId INTEGER,
-                StaffId INTEGER
+                TrekName TEXT,
+                StaffId INTEGER,
+                StaffName TEXT,
+                TrekStart DATE,
+                Duration_HRS INTEGER
                 );""")
 
 

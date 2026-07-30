@@ -1,0 +1,34 @@
+{% extends "staffLayout.html" %}
+{% block content %}
+
+{% if trek %}
+<form action="/manageTrekS/{{trek[0]}}" method="POST">
+    Trek Name: {{trek[1]}}
+    <br>
+    Difficulty: {{trek[2]}}
+    <br>
+    Location: {{trek[3]}}
+    <br>
+    Duration: {{trek[4]}}
+    <br>
+    Start Date: {{trek[5]}}
+    <br>
+    End Date: {{trek[6]}}
+    <br>
+    <label for="Slot">Slots</label>
+    <input type="number" name="Slot" id="Slot" value="{{trek[7]}}">
+
+    <label for="Status">Status</label>
+    <select name="Status" id="Status">
+        <option value="Open" {% if trek[9]=="Open" %}selected{% endif %}>Open</option>
+        <option value="Closed" {% if trek[9]=="Closed" %}selected{% endif %}>Closed</option>
+    </select>
+    <a href="/markOngoing/{{trek[0]}}">Mark as Ongoing</a>
+    <a href="/markCompleted/{{trek[0]}}">Mark as Completed</a>
+    <a href="/assignedTreks">Cancel</a>
+    <input type="submit" value="Save">
+</form>
+{% else %}
+Trek Not Found
+{% endif %}
+{% endblock %}
