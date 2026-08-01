@@ -1,0 +1,15 @@
+{% extends "trekkerLayout.html" %}
+{% block content %}
+{% if aTreks %}
+{% for aTrek in aTreks %}
+<div>
+    {{aTrek[1]}}
+    <a href="/trekDetailT/{{aTrek[0]}}">View Details</a>
+    <br>
+    <a href="/bookTrek/{{aTrek[0]}}">Book Now</a>
+</div>
+{% endfor %}
+{% else %}
+No Treks Available 
+{% endif %}
+{% endblock %}

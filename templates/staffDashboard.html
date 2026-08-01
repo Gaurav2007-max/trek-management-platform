@@ -25,7 +25,7 @@ Assigned Treks<br>
         <td>{{aTrek[3]}}</td>
         <td>{{aTrek[4]}}</td>
         <td>{{aTrek[5]}}</td>
-        <td><a href="/manageTrekS/{{aTrek[0]}}">Manage</a></td>
+        <td><a href="{{url_for('/manageTrekS/{{aTrek[0]}}',val=0)}}">Manage</a></td>
     </tr>
     {% endfor %}
 </table>

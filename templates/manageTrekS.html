@@ -25,7 +25,11 @@
     </select>
     <a href="/markOngoing/{{trek[0]}}">Mark as Ongoing</a>
     <a href="/markCompleted/{{trek[0]}}">Mark as Completed</a>
+    {% if val==1 %}
     <a href="/assignedTreks">Cancel</a>
+    {% else %}
+    <a href="/staffDashboard">Cancel</a>
+    {% endif %}
     <input type="submit" value="Save">
 </form>
 {% else %}

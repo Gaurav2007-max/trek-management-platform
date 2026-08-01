@@ -27,7 +27,7 @@
     <input type="number" name="Slot" id="Slot" value="{{trek[7]}}">
 
     <label for="Staff">Staff ID</label>
-    <input type="number" name="StaffId" id="Staff" value="{{trek[8]}}">
+    <input type="number" name="StaffId" id="Staff" value="{{ trek[8] if trek[8] is not None else '' }}">
 
     <label for="Status">Status</label>
     <select name="Status" id="Status">

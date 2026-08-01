@@ -1,0 +1,29 @@
+{% extends "trekkerLayout.html" %}
+{% block content %}
+<H3>Welcome {{userInfo[1]}}</H3>
+{% if aTreks%}
+<H3>Available Treks</H3>
+<table>
+    <tr>
+        <th>Trek Name</th>
+        <th>Location</th>
+        <th>Difficulty</th>
+        <th>Duration</th>
+        <th>Available Slots</th>
+        <th>Action</th>
+    </tr>
+    {% for aTrek in aTreks %}
+    <tr>
+        <td>{{aTrek[1]}}</td>
+        <td>{{aTrek[2]}}</td>
+        <td>{{aTrek[3]}}</td>
+        <td>{{aTrek[4]}}</td>
+        <td>{{aTrek[5]}}</td>
+        <td><a href="/bookTrek/{{aTrek[0]}}">Book Now</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+No Available Treks currently
+{% endif %}
+{% endblock %}

@@ -1,13 +1,11 @@
 {% extends "trekkerLayout.html" %}
 {% block content %}
-    <h3>trek[1]</h3>
-    Trek Name: {{trek[1]}}
-    <br>
+    <h3>{{trek[1]}}</h3>
     Difficulty: {{trek[2]}}
     <br>
     Location: {{trek[3]}}
     <br>
-    Duration: {{trek[4]}}
+    Duration: {{trek[4]}} Hrs
     <br>
     Start Date: {{trek[5]}}
     <br>
@@ -15,9 +13,11 @@
     <br>
     Slots: {{trek[7]}}
     <br>
-    Status: {{trek[8]}}
+    Staff Name: {{trek[8]}}
     <br>
-    Staff Name: {{trek[9]}}
+    Status: {{trek[9]}}
     <br>
     Staff Contact: {{trek[10]}}
-{% endblock%}
+    <br>
+    <a href="{{ url_for('bookTrek', TrekId=trek[0]) }}">Book Now</a>
+{% endblock %}

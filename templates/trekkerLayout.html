@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trekker</title>
+</head>
+<body>
+    <div id="navbar">
+        <h3>Trekker</h3>
+        <a href="/trekkerDashboard">Dashboard</a>
+        <a href="/trekkerProfile">Profile</a>
+        <a href="/trekkerTreks">Treks</a>
+        <a href="/bookedTreks">Bookings</a>
+        <a href="/trekkerHistory">Trek History</a>
+        <a href="/logout">Logout</a>
+    </div>
+    <div id="content">
+        {% block content %}
+        {% endblock %}
+    </div>
+</body>
+</html>

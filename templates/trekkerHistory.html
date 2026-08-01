@@ -1,0 +1,29 @@
+{% extends 'trekkerLayout.html' %}
+{% block content %}
+Trekking History
+{% if trekkings %}
+<table>
+    <tr>
+        <th>Trek Name</th>
+        <th>Booked Date</th>
+        <th>Trek Date</th>
+        <th>Completion Date</th>
+        <th>Status</th>
+    </tr>
+    {% for trekking in trekkings %}
+    <tr>
+        <td>{{trekking[1]}}</td>
+        <td>{{trekking[2]}}</td>
+        <td>{{trekking[3]}}</td>
+        <td>{{trekking[4]}}</td>
+        <td>{{trekking[5]}}</td>
+
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+No Bookings Till Now
+<br>
+<a href="/trekkerTreks">Book Now</a>
+{% endif %}
+{% endblock %}

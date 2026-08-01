@@ -56,7 +56,9 @@ cursor.execute("""Create table History (
                 StaffId INTEGER,
                 StaffName TEXT,
                 TrekStart DATE,
-                Duration_HRS INTEGER
+                TrekEnd Date,
+                BookingDate Date,
+                Status TEXT
                 );""")
 
 

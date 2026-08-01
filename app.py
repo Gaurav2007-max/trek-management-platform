@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for,flash,session
 import sqlite3 
+from datetime import date
+
 
 app=Flask(__name__)
 app.secret_key="trekker"
-
 
 @app.route('/',methods=["GET","POST"])
 def index():
@@ -21,7 +22,7 @@ def index():
             elif(Role=="Staff"):
                 return redirect(url_for("staffDashboard"))
             else:
-                return redirect(url_for("userDashboard"))
+                return redirect(url_for("trekkerDashboard"))
         else:
             flash("No Data found in database", "error")
             return redirect(url_for("login"))
@@ -47,7 +48,7 @@ def login():
             elif(userInfo[4]=="Staff"):
                 return redirect(url_for("staffDashboard"))
             else:
-                return redirect(url_for("userDashboard"))
+                return redirect(url_for("trekkerDashboard"))
         else:
             flash("Invalid username or password", "error")
             return redirect(url_for("login"))
@@ -502,6 +503,7 @@ def editStaffProfile():
 
 @app.route("/manageTrekS/<int:trekId>", methods=["GET","POST"])
 def manageTrekS(trekId):
+    val=request.args.get('val',1)
     if(request.method=="POST"):
         Slot=request.form.get("Slot")
         Status=request.form.get("Status")
@@ -511,17 +513,20 @@ def manageTrekS(trekId):
         cursor.execute("Update Trek set Slot=?, Status=? where TrekId=?",(Slot,Status,trekId))
         conn.commit()
         conn.close()
-        return redirect(url_for("assignedTreks"))
+        if val==1:
+            return redirect(url_for("assignedTreks"))
+        else:
+            return redirect(url_for('staffDashboard'))
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
     cursor.execute("Select * from Trek where TrekId=?",(trekId,))
     trek=cursor.fetchone()
     conn.close()
-    return render_template("manageTrekS.html",trek=trek)
+    return render_template("manageTrekS.html",trek=trek,val=val)
 
 @app.route("/trekDetailS/<int:trekId>")
-def trekDeatilS(trekId):
+def trekDetailS(trekId):
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -546,12 +551,12 @@ def markCompleted(trekId):
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
     staffId=session.get("UserId")
-    cursor.execute("""Select BookingId, u.UserId, FullName, t.TrekId, t.TrekName, t.StaffId,s.FullName,t.StartDate,Duration_HRS 
+    cursor.execute("""Select BookingId, u.UserId, FullName, t.TrekId, t.TrekName, t.StaffId,s.FullName,t.StartDate,t.EndDate,b.BookingDate
         FROM Trek t, Booking b, User u, User s
-        where t.Trekid=b.TrekId and b.UserId=u.UserId and t.StaffId=s.UserId and t.trekId=? and t.StaffId=?""",(trekId,staffId))
+        where t.TrekId=b.TrekId and b.UserId=u.UserId and t.StaffId=s.UserId and t.trekId=? and t.StaffId=?""",(trekId,staffId))
     data=cursor.fetchall()
     for rec in data:
-        cursor.execute("INSERT INTO History(BookingId, TrekkerId,TrekkerName, TrekId, TrekName, StaffId, StaffName,TrekStart ,Duration_HRS) values(?,?,?,?,?,?,?,?,?)", rec)
+        cursor.execute("INSERT INTO History(BookingId, TrekkerId,TrekkerName, TrekId, TrekName, StaffId, StaffName,TrekStart ,TrekEnd,BookingDate,Status) values(?,?,?,?,?,?,?,?,?,?,'Completed')", rec)
     conn.commit()
     conn.close()
     return redirect(url_for("assignedTreks"))
@@ -568,10 +573,132 @@ def removeParticipant(trekkerId,trekId):
     conn.close()
     return redirect(url_for("staffTrekkers"))
 
-@app.route('/userDashboard')
-def userDashboard():
-    return render_template("userDashboard.html")
+@app.route('/trekkerDashboard')
+def trekkerDashboard():
+    session["val"]=0
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    cursor.execute("SELECT TrekId, TrekName,Location,Difficulty,Duration_HRS,Slot-Participants from Trek where Status='Open' and Slot-Participants>0 LIMIT 5")
+    aTreks=cursor.fetchall()
+    Id=session.get("UserId")
+    cursor.execute("Select * from User where UserId=?",(Id,))  
+    UserInfo=cursor.fetchone()
+    conn.close()
+    return render_template("trekkerDashboard.html",aTreks=aTreks,userInfo=UserInfo)
 
+@app.route('/trekkerProfile')
+def trekkerProfile():
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    Id=session.get("UserId")
+    cursor.execute("Select UserId,FullName,UserEmail,Contact from User where UserId=?",(Id,))  
+    Trekker=cursor.fetchone()
+    cursor.execute("Select COUNT(TrekId) from History where TrekkerId=?",(Id,))
+    c=cursor.fetchone()[0]
+    conn.close()
+    return render_template("trekkerProfile.html",c=c,Trekker=Trekker)
+
+@app.route("/editTrekkerProfile", methods=["GET","POST"])
+def editTrekkerProfile():
+    if(request.method=="POST"):
+        name=request.form.get("name")
+        email=request.form.get("email")
+        contact=request.form.get("contact")
+        conn=sqlite3.connect("TrekManagement.db")
+        conn.execute("PRAGMA foreign_keys = ON;")
+        cursor=conn.cursor()
+        Id=session.get("UserId")
+        cursor.execute("UPDATE User set FullName=?, UserEmail=?, contact=? where UserId=?",(name,email,contact,Id))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("trekkerProfile"))
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    Id=session.get("UserId")
+    cursor.execute("Select UserId,FullName,UserEmail,Contact from User where UserId=?",(Id,))
+    Trekker=cursor.fetchone()
+    conn.close()
+    return render_template("editTrekkerProfile.html",Trekker=Trekker)
+
+@app.route("/trekkerTreks")
+def trekkerTreks():
+    session["val"]=2
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    cursor.execute("Select TrekId, TrekName from Trek where Status='Open' and Slot-Participants>0")
+    aTreks=cursor.fetchall()
+    conn.close()
+    return render_template("trekkerTreks.html",aTreks=aTreks)
+
+@app.route("/trekDetailT/<int:TrekId>")
+def trekDetailT(TrekId):
+    session["val"]=3
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    #without left join this will crash
+    cursor.execute("Select TrekId,TrekName,Difficulty,Location,Duration_HRS,StartDate,EndDate,Slot,u.FullName,Status,Contact from Trek t Left Join User u on t.StaffId=u.UserId where TrekId=?",(TrekId,))
+    trek=cursor.fetchone()
+    conn.close()
+    return render_template("trekDetailT.html",trek=trek)
+
+@app.route("/bookTrek/<int:TrekId>", methods=["GET","POST"])
+def bookTrek(TrekId):
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    Id=session.get("UserId")
+    if(request.method=='POST'):
+        cursor.execute("INSERT into Booking(BookingId,UserId,TrekId,BookingStatus,BookingDate,PaymentStatus) values(?,?,?,?,?,?)",(None,Id,TrekId,'Booked',date.today(),'Done'))
+        flash("Your Booking was Completed")
+        cursor.execute("Update Trek set Participants=Participants+1 where TrekId=?",(TrekId,))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("bookedTreks"))
+    conn.close()
+    return render_template("bookTrek.html",TrekId=TrekId)
+
+@app.route("/bookedTreks")
+def bookedTreks():
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    Id=session.get("UserId")
+    cursor.execute("SELECT BookingId,TrekName,BookingDate,StartDate,Duration_HRS,BookingStatus,TrekId from Trek t,Booking b where b.TrekId=t.TrekId and b.UserId=?",(Id,))
+    bookings=cursor.fetchall()
+    conn.close()
+    return render_template("bookedTreks.html",bookings=bookings)
+
+@app.route("/cancelBooking/<int:BookingId>")
+def cancelBooking(BookingId):
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    cursor.execute("Select TrekId from Booking where BookingId=?",(BookingId,))
+    row=cursor.fetchone()
+    if row:
+        TrekId=row[0]
+        cursor.execute("Delete from Booking where BookingId=?",(BookingId,))
+        cursor.execute("Update Trek set Participants=Participants-1 where TrekId=?",(TrekId,)) 
+        conn.commit()
+    conn.close()
+    return redirect(url_for("bookedTreks"))
+
+
+@app.route("/trekkerHistory")
+def trekkerHistory():
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    Id=session.get("UserId")
+    cursor.execute("Select BookingId, TrekName, BookingDate,TrekStart,TrekEnd,Status from History where TrekkerId=?",(Id,))
+    trekkings=cursor.fetchall()
+    conn.close()
+    return render_template("trekkerHistory.html",trekkings=trekkings)
 
 @app.route("/logout")
 def logout():

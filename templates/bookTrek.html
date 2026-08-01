@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment</title>
+</head>
+<body>
+    <form action="/bookTrek/{{TrekId}}" method="POST">
+        <label for="CRN">CRN:</label>
+        <input type="number" name="CRN" id="CRN">
+
+        <label for="Password">Password:</label>
+        <input type="password" name="password" id="password">
+        <input type="submit" value="Confirm">
+    </form>
+</body>
+</html>
