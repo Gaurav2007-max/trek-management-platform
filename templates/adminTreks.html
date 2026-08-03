@@ -12,7 +12,7 @@
     <table border="1px">
         {% if treks %}
             <tr>
-                <th>TrekId</th>
+                <th>S.No</th>
                 <th>Trek Name</th>
                 <th>Difficulty</th>
                 <th>Location</th>
@@ -24,7 +24,7 @@
             </tr>
             {% for trek in treks %}
             <tr>
-                <td>{{trek[0]}}</td>
+                <td>{{loop.index}}</td>
                 <td>{{trek[1]}}</td>
                 <td>{{trek[2]}}</td>
                 <td>{{trek[3]}}</td>

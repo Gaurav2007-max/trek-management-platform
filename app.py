@@ -39,8 +39,14 @@ def login():
         username=request.form.get("Username")
         password=request.form.get("Password")
         cursor.execute("Select * from User where UserEmail=? AND UserPassword=?",(username,password))
-        userInfo=cursor.fetchone()
+        row = cursor.fetchone()
+        userInfo=row
         conn.close()
+        if row:
+            Role = row[0]
+        else:
+            flash("User not found", "error")
+            return redirect(url_for("login"))
         if(userInfo):
             session['UserId']=userInfo[0]
             if(userInfo[4]=="Admin"):
@@ -63,6 +69,13 @@ def register():
         cursor=conn.cursor()
         name=request.form.get("Fullname")
         email=request.form.get("Email")
+        cursor.execute("Select UserEmail from User where UserEmail=?",(email,))
+        data=cursor.fetchone()
+        if(data):
+            flash("Email already in use")
+            conn.close()
+            return redirect('/register')
+
         password=request.form.get("Password")
         password2=request.form.get("Password2")
         contact=request.form.get("Contact")
@@ -324,7 +337,7 @@ def approve(ReqId):
     cursor.execute("SELECT * FROM StaffReq where ReqId=?",(ReqId,))
     staff=cursor.fetchone()
     if staff:
-        cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,'Staff',?)", (None, staff[1], staff[2], staff[3], staff[4]))
+        cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,'Staff',?)", (None, staff[0], staff[1], staff[2], staff[3]))
         cursor.execute("Delete from StaffReq where ReqId=?",(ReqId,))
         conn.commit()
     conn.close()
@@ -477,7 +490,7 @@ def staffTrekkers():
     cursor.execute("""Select DISTINCT t.TrekId, TrekName from Trek t, Booking b, User u 
         where u.UserId=b.UserId and b.TrekId=t.TrekId and t.StaffId=?""",(staffId,))
     aTreks=cursor.fetchall()
-    return render_template("stafftrekkers.html",aTreks=aTreks,Trekkers=Trekkers)
+    return render_template("staffTrekkers.html",aTreks=aTreks,Trekkers=Trekkers)
 
 @app.route("/editStaffProfile", methods=["GET","POST"])
 def editStaffProfile():
@@ -551,10 +564,13 @@ def markCompleted(trekId):
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
     staffId=session.get("UserId")
-    cursor.execute("""Select BookingId, u.UserId, FullName, t.TrekId, t.TrekName, t.StaffId,s.FullName,t.StartDate,t.EndDate,b.BookingDate
+    cursor.execute("""Select BookingId, u.UserId, u.FullName, t.TrekId, t.TrekName, t.StaffId,s.FullName,t.StartDate,t.EndDate,b.BookingDate
         FROM Trek t, Booking b, User u, User s
-        where t.TrekId=b.TrekId and b.UserId=u.UserId and t.StaffId=s.UserId and t.trekId=? and t.StaffId=?""",(trekId,staffId))
+        where t.TrekId=b.TrekId and b.UserId=u.UserId and t.StaffId=s.UserId and t.TrekId=? and t.StaffId=?""",(trekId,staffId))
     data=cursor.fetchall()
+    cursor.execute("Delete from Trek where TrekId=?",(trekId,))
+    for booking in data:
+        cursor.execute("Delete from Booking where BookingId=?",(booking[0],))
     for rec in data:
         cursor.execute("INSERT INTO History(BookingId, TrekkerId,TrekkerName, TrekId, TrekName, StaffId, StaffName,TrekStart ,TrekEnd,BookingDate,Status) values(?,?,?,?,?,?,?,?,?,?,'Completed')", rec)
     conn.commit()

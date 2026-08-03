@@ -7,7 +7,7 @@ cursor=conn.cursor()
 cursor.execute("""Create table User (
                UserId INTEGER PRIMARY KEY autoincrement,
                FullName TEXT,
-               UserEmail TEXT,
+               UserEmail TEXT UNIQUE,
                UserPassword TEXT,
                UserRole TEXT,
                Contact TEXT
@@ -33,7 +33,7 @@ cursor.execute("""Create table Booking (
                UserId INTEGER, 
                TrekId INTEGER,
                BookingStatus TEXT,
-               BookingDate TEXT,
+               BookingDate Date,
                PaymentStatus TEXT,
                FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
                FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE

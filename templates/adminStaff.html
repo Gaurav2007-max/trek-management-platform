@@ -8,6 +8,7 @@
 <table border="1px">
     {% if staffs %}
         <tr>
+            <th>S.No</th>
             <th>StaffId</th>
             <th>Name</th>
             <th>Email</th>
@@ -16,6 +17,7 @@
         </tr>
         {% for staff in staffs %}
         <tr>
+            <td>{{loop.index}}</td>
             <td>{{staff[0]}}</td>
             <td>{{staff[1]}}</td>
             <td>{{staff[2]}}</td>

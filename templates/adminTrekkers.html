@@ -8,6 +8,7 @@
 <table border="1px">
     {% if users %}
         <tr>
+            <th>S.No</th>
             <th>UserId</th>
             <th>Name</th>
             <th>Email</th>
@@ -16,6 +17,7 @@
         </tr>
         {% for user in users %}
         <tr>
+            <td>{{loop.index}}</td>
             <td>{{user[0]}}</td>
             <td>{{user[1]}}</td>
             <td>{{user[2]}}</td>
