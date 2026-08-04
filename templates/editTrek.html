@@ -2,7 +2,7 @@
 {% block content %}
 <form action="/editTrek/{{trek[0]}}" method="POST">
     <label for="TrekName">Trek Name</label>
-    <input type="text" name="Trekname" id="TrekName" value="{{trek[1]}}">
+    <input type="text" name="Trekname" id="TrekName" value="{{trek[1]}}" required minlength="3" maxlength="100">
 
     <label for="Difficulty">Difficulty</label>
     <select id="Difficulty" name="Difficulty">
@@ -12,22 +12,22 @@
     </select>        
     
     <label for="Location">Location</label>
-    <input type="text" name="Location" id="Location" value="{{trek[3]}}">
+    <input type="text" name="Location" id="Location" value="{{trek[3]}}" required minlength="3" maxlength="100">
 
     <label for="Duration">Duration(in hrs)</label>
-    <input type="number" name="Duration" id="Duration" value="{{trek[4]}}">
+    <input type="number" name="Duration" id="Duration" value="{{trek[4]}}" required min="1">
 
     <label for="Start">Start Date</label>
-    <input type="date" name="sDate" id="Start" value="{{trek[5]}}">
+    <input type="date" name="sDate" id="Start" value="{{trek[5]}}" required>
 
     <label for="End">End Date</label>
-    <input type="date" name="eDate" id="End" value="{{trek[6]}}">
+    <input type="date" name="eDate" id="End" value="{{trek[6]}}" required>
 
     <label for="Slot">Slots</label>
-    <input type="number" name="Slot" id="Slot" value="{{trek[7]}}">
+    <input type="number" name="Slot" id="Slot" value="{{trek[7]}}" required min="1">
 
     <label for="Staff">Staff ID</label>
-    <input type="number" name="StaffId" id="Staff" value="{{ trek[8] if trek[8] else '' }}">
+    <input type="number" name="StaffId" id="Staff" value="{{ trek[8] if trek[8] else None }}">
 
     <label for="Status">Status</label>
     <select name="Status" id="Status">

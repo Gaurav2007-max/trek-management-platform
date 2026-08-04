@@ -6,6 +6,34 @@ from datetime import date
 app=Flask(__name__)
 app.secret_key="trekker"
 
+def checkAdmin():
+    if("UserId" not in session):
+        flash("Please login first")
+        return redirect("/login")
+    if(session.get('Role')!='Admin'):
+        flash("You do not have access to this page or action")
+        return render_template("unauthorized.html"),403
+    return
+
+def checkStaff():
+    if("UserId" not in session):
+        flash("Please login first")
+        return redirect("/login")
+    if(session.get('Role')!='Staff'):
+        flash("You do not have access to this page or action")
+        return render_template("unauthorized.html"),403
+    return
+
+def checkTrekker():
+    if("UserId" not in session):
+        flash("Please login first")
+        return redirect("/login")
+    if(session.get('Role')!='Trekker'):
+        flash("You do not have access to this page or action")
+        return render_template("unauthorized.html"),403
+    return
+
+
 @app.route('/',methods=["GET","POST"])
 def index():
     if "UserId" in session:
@@ -13,8 +41,7 @@ def index():
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor=conn.cursor()
         Id=session.get("UserId")
-        cursor.execute("Select UserRole from User where UserId=?",(Id,))
-        Role=cursor.fetchone()[0]
+        Role=session.get("Role")
         conn.close()
         if(Role):
             if(Role=="Admin"):
@@ -38,17 +65,22 @@ def login():
         cursor=conn.cursor()
         username=request.form.get("Username")
         password=request.form.get("Password")
+        if not username or not password:
+            conn.close()
+            flash("All fields required")
+            return redirect("/login")
         cursor.execute("Select * from User where UserEmail=? AND UserPassword=?",(username,password))
-        row = cursor.fetchone()
+        row=cursor.fetchone()
         userInfo=row
         conn.close()
         if row:
-            Role = row[0]
+            Role = row[4]
         else:
             flash("User not found", "error")
             return redirect(url_for("login"))
         if(userInfo):
             session['UserId']=userInfo[0]
+            session['Role']=userInfo[4]
             if(userInfo[4]=="Admin"):
                 return redirect(url_for("adminDashboard"))
             elif(userInfo[4]=="Staff"):
@@ -71,6 +103,7 @@ def register():
         email=request.form.get("Email")
         cursor.execute("Select UserEmail from User where UserEmail=?",(email,))
         data=cursor.fetchone()
+        
         if(data):
             flash("Email already in use")
             conn.close()
@@ -80,6 +113,10 @@ def register():
         password2=request.form.get("Password2")
         contact=request.form.get("Contact")
         role=request.form.get("Role")
+        if not name or not password or not password2 or not email or not contact or not role:
+            conn.close()
+            flash("All fields required")
+            return redirect("/register")
         if(password!=password2):
             flash("Please enter same password for confirmation","warning")
             conn.close()
@@ -101,6 +138,9 @@ def register():
 
 @app.route('/adminDashboard')
 def adminDashboard():
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -122,6 +162,9 @@ def adminDashboard():
 
 @app.route('/addTrek',methods=["GET","POST"])
 def addTrek():
+    response=checkAdmin()
+    if response:
+        return response
     if(request.method=="POST"):
         conn=sqlite3.connect("TrekManagement.db")
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -134,6 +177,10 @@ def addTrek():
         TrekE=request.form.get("eDate")
         TrekSlot=request.form.get("Slot")
         TrekStaff=request.form.get("StaffId") or None
+        if TrekE<TrekS:
+            flash("End date must be after start date")
+            conn.close()
+            return redirect("/addTrek")
         cursor.execute("INSERT INTO Trek(TrekId,TrekName,Difficulty,Location,Duration_HRS,StartDate,EndDate,Slot,StaffId,Status) VALUES(?,?,?,?,?,?,?,?,?,'Open')",(None,TrekName,TrekDifficulty,TrekLocation,TrekDuration,TrekS,TrekE,TrekSlot,TrekStaff))
         conn.commit()
         conn.close()
@@ -142,6 +189,9 @@ def addTrek():
 
 @app.route("/adminTreks", methods=["GET","POST"])
 def adminTreks():
+    response=checkAdmin()
+    if response:
+        return response
     if(request.method=="POST"):
         NameorId=request.form.get("NameorId")
         if(NameorId):
@@ -167,6 +217,9 @@ def adminTreks():
 
 @app.route("/editTrek/<int:TrekId>",methods=["GET","POST"])
 def editTrek(TrekId):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -180,6 +233,10 @@ def editTrek(TrekId):
         TrekSlot=request.form.get("Slot")
         TrekStaff=request.form.get("StaffId") or None
         TrekStatus=request.form.get("Status")
+        if TrekE<TrekS:
+            flash("End date must be after start date")
+            conn.close()
+            return redirect(url_for("editTrek",TrekId=TrekId))
         cursor.execute("""UPDATE Trek SET TrekName=?, Difficulty=?, Location=?, Duration_HRS=?, StartDate=?, EndDate=?, Slot=?, StaffId=?, Status=? WHERE TrekId=?""", (
             TrekName,TrekDifficulty,TrekLocation,TrekDuration,TrekS,TrekE,TrekSlot,TrekStaff,TrekStatus,TrekId))
         conn.commit()
@@ -192,6 +249,9 @@ def editTrek(TrekId):
 
 @app.route("/removeTrek/<int:TrekId>")
 def removeTrek(TrekId):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -202,6 +262,9 @@ def removeTrek(TrekId):
 
 @app.route("/searchTrek/<x>/<int:y>",methods=["GET","POST"])
 def searchTrek(x,y):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -218,6 +281,9 @@ def searchTrek(x,y):
 
 @app.route("/adminTrekkers", methods=["GET","POST"])
 def adminTrekkers():
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -244,6 +310,9 @@ def adminTrekkers():
     
 @app.route("/searchUser/<x>/<int:y>",methods=["GET","POST"])
 def searchTrekker(x,y):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -261,6 +330,9 @@ def searchTrekker(x,y):
 
 @app.route("/blacklist/<int:UserId>")
 def blacklist(UserId):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -272,6 +344,9 @@ def blacklist(UserId):
 
 @app.route("/adminStaff", methods=["GET","POST"])
 def adminStaff():
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -300,6 +375,9 @@ def adminStaff():
     
 @app.route("/searchStaff/<x>/<int:y>",methods=["GET","POST"])
 def searchStaff(x,y):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -321,6 +399,9 @@ def searchStaff(x,y):
 
 @app.route("/blacklistS/<int:UserId>")
 def blacklistS(UserId):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -331,13 +412,16 @@ def blacklistS(UserId):
 
 @app.route("/approve/<int:ReqId>",methods=["GET","POST"])
 def approve(ReqId):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
     cursor.execute("SELECT * FROM StaffReq where ReqId=?",(ReqId,))
     staff=cursor.fetchone()
     if staff:
-        cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,'Staff',?)", (None, staff[0], staff[1], staff[2], staff[3]))
+        cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,'Staff',?)", (None, staff[1], staff[2], staff[3], staff[4]))
         cursor.execute("Delete from StaffReq where ReqId=?",(ReqId,))
         conn.commit()
     conn.close()
@@ -345,6 +429,9 @@ def approve(ReqId):
 
 @app.route("/reject/<int:ReqId>",methods=["GET","POST"])
 def reject(ReqId):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -358,6 +445,9 @@ def reject(ReqId):
 
 @app.route("/adminBookings", methods=["GET","POST"])
 def adminBooking():
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -388,6 +478,9 @@ def adminBooking():
     
 @app.route("/searchBooking/<x>/<int:y>/<string:s>",methods=["GET","POST"])
 def searchBooking(x,y,s):
+    response=checkAdmin()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -433,9 +526,11 @@ def searchBooking(x,y,s):
         conn.close()
         return "ERROR in SearchBy"
     
-# Staff Dashboard
 @app.route('/staffDashboard')
 def staffDashboard():
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -455,6 +550,9 @@ def staffDashboard():
 
 @app.route("/staffProfile")
 def staffProfile():
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -468,6 +566,9 @@ def staffProfile():
 
 @app.route("/assignedTreks")
 def assignedTreks():
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -480,6 +581,9 @@ def assignedTreks():
 
 @app.route("/staffTrekkers")
 def staffTrekkers():
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -490,10 +594,14 @@ def staffTrekkers():
     cursor.execute("""Select DISTINCT t.TrekId, TrekName from Trek t, Booking b, User u 
         where u.UserId=b.UserId and b.TrekId=t.TrekId and t.StaffId=?""",(staffId,))
     aTreks=cursor.fetchall()
+    conn.close()
     return render_template("staffTrekkers.html",aTreks=aTreks,Trekkers=Trekkers)
 
 @app.route("/editStaffProfile", methods=["GET","POST"])
 def editStaffProfile():
+    response=checkStaff()
+    if response:
+        return response
     if(request.method=="POST"):
         conn=sqlite3.connect("TrekManagement.db")
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -516,6 +624,9 @@ def editStaffProfile():
 
 @app.route("/manageTrekS/<int:trekId>", methods=["GET","POST"])
 def manageTrekS(trekId):
+    response=checkStaff()
+    if response:
+        return response
     val=request.args.get('val',1)
     if(request.method=="POST"):
         Slot=request.form.get("Slot")
@@ -540,6 +651,9 @@ def manageTrekS(trekId):
 
 @app.route("/trekDetailS/<int:trekId>")
 def trekDetailS(trekId):
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -550,6 +664,9 @@ def trekDetailS(trekId):
 
 @app.route("/markOngoing/<int:trekId>")
 def markOngoing(trekId):
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -560,6 +677,9 @@ def markOngoing(trekId):
 
 @app.route("/markCompleted/<int:trekId>")
 def markCompleted(trekId):
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -579,6 +699,9 @@ def markCompleted(trekId):
 
 @app.route("/removeParticipant/<int:trekkerId>/<int:trekId>")
 def removeParticipant(trekkerId,trekId):
+    response=checkStaff()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -591,6 +714,9 @@ def removeParticipant(trekkerId,trekId):
 
 @app.route('/trekkerDashboard')
 def trekkerDashboard():
+    response=checkTrekker()
+    if response:
+        return response
     session["val"]=0
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -605,6 +731,9 @@ def trekkerDashboard():
 
 @app.route('/trekkerProfile')
 def trekkerProfile():
+    response=checkTrekker()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -618,6 +747,9 @@ def trekkerProfile():
 
 @app.route("/editTrekkerProfile", methods=["GET","POST"])
 def editTrekkerProfile():
+    response=checkTrekker()
+    if response:
+        return response
     if(request.method=="POST"):
         name=request.form.get("name")
         email=request.form.get("email")
@@ -641,6 +773,9 @@ def editTrekkerProfile():
 
 @app.route("/trekkerTreks")
 def trekkerTreks():
+    response=checkTrekker()
+    if response:
+        return response
     session["val"]=2
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -652,11 +787,13 @@ def trekkerTreks():
 
 @app.route("/trekDetailT/<int:TrekId>")
 def trekDetailT(TrekId):
+    response=checkTrekker()
+    if response:
+        return response
     session["val"]=3
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
-    #without left join this will crash
     cursor.execute("Select TrekId,TrekName,Difficulty,Location,Duration_HRS,StartDate,EndDate,Slot,u.FullName,Status,Contact from Trek t Left Join User u on t.StaffId=u.UserId where TrekId=?",(TrekId,))
     trek=cursor.fetchone()
     conn.close()
@@ -664,11 +801,25 @@ def trekDetailT(TrekId):
 
 @app.route("/bookTrek/<int:TrekId>", methods=["GET","POST"])
 def bookTrek(TrekId):
+    response=checkTrekker()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
     Id=session.get("UserId")
     if(request.method=='POST'):
+        cursor.execute("Select BookingId from Booking where UserId=? and TrekId=? and BookingStatus='Booked'",(Id,TrekId))
+        if cursor.fetchone():
+            flash("You have already booked this Trek")
+            conn.close()
+            return redirect(url_for("bookedTreks"))
+        cursor.execute("Select Participants,Slot from Trek where TrekId=?",(TrekId,))
+        p,s=cursor.fetchone()
+        if p>=s:
+            flash("No slots available.")
+            conn.close()
+            return redirect(url_for("trekkerTreks"))
         cursor.execute("INSERT into Booking(BookingId,UserId,TrekId,BookingStatus,BookingDate,PaymentStatus) values(?,?,?,?,?,?)",(None,Id,TrekId,'Booked',date.today(),'Done'))
         flash("Your Booking was Completed")
         cursor.execute("Update Trek set Participants=Participants+1 where TrekId=?",(TrekId,))
@@ -680,6 +831,9 @@ def bookTrek(TrekId):
 
 @app.route("/bookedTreks")
 def bookedTreks():
+    response=checkTrekker()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -691,6 +845,9 @@ def bookedTreks():
 
 @app.route("/cancelBooking/<int:BookingId>")
 def cancelBooking(BookingId):
+    response=checkTrekker()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
@@ -707,6 +864,9 @@ def cancelBooking(BookingId):
 
 @app.route("/trekkerHistory")
 def trekkerHistory():
+    response=checkTrekker()
+    if response:
+        return response
     conn=sqlite3.connect("TrekManagement.db")
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()

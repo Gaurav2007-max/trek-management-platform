@@ -2,13 +2,13 @@
 {% block content %}
 <form action="/editTrekkerProfile" method="POST">
     <label for="name">Name:</label>
-    <input type="text" name="name" id="name" value="{{Trekker[1]}}">
+    <input type="text" name="name" id="name" value="{{Trekker[1]}}" required minlength="3" maxlength="50" pattern="[A-Za-z]">
 
     <label for="email">Email:</label>
-    <input type="email" name="email" id="email" value="{{Trekker[2]}}">
+    <input type="email" name="email" id="email" value="{{Trekker[2]}}" required>
 
     <label for="contact">Contact:</label>
-    <input type="text" name="contact" id="contact" value="{{Trekker[3]}}">
+    <input type="text" name="contact" id="contact" value="{{Trekker[3]}}" required pattern="[0-9]{10}">
     
     <a href="/trekkerProfile">Cancel</a>
     <input type="submit" value="Save">

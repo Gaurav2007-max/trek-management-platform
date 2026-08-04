@@ -2,29 +2,30 @@
 {% block content %}
 <form action="/addTrek" method="POST">
     <label for="TrekName">Trek Name</label>
-    <input type="text" name="Trekname" id="TrekName">
+    <input type="text" name="Trekname" id="TrekName" required minlength="3" maxlength="100">
 
     <label for="Difficulty">Difficulty</label>
     <Select id="Difficulty" name="Difficulty">
+        <option value="" disabled selected hidden>Select level</option>
         <option value="Easy">Easy</option>
         <option value="Moderate">Moderate</option>
         <option value="Hard">Hard</option>
     </Select>        
     
     <label for="Location">Location</label>
-    <input type="text" name="Location" id="Location">
+    <input type="text" name="Location" id="Location" required minlength="3" maxlength="100">
 
     <label for="Duration">Duration(in hrs)</label>
-    <input type="number" name="Duration" id="Duration">
+    <input type="number" name="Duration" id="Duration" required min="1">
 
     <label for="Start">Start Date</label>
-    <input type="date" name="sDate" id="Start">
+    <input type="date" name="sDate" id="Start" required>
 
     <label for="End">End Date</label>
-    <input type="date" name="eDate" id="End">
+    <input type="date" name="eDate" id="End" required>
 
     <label for="Slot">Slots</label>
-    <input type="number" name="Slot" id="Slot">
+    <input type="number" name="Slot" id="Slot" required min="1">
 
     <label for="Staff">Staff ID</label>
     <input type="number" name="StaffId" id="Staff">
