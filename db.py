@@ -62,7 +62,7 @@ cursor.execute("""Create table History (
                 );""")
 
 
-cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","2026","Admin",Null);""")
+cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","15022026","Admin",Null);""")
 
 conn.commit()
 conn.close()

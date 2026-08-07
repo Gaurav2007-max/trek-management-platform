@@ -1,17 +1,23 @@
 {% extends "staffLayout.html" %}
 {% block content %}
-<form action="/editStaffProfile" method="POST">
+
+<div id="form" class="d-flex flex-column justify-content-center align-items-center vh-80" style="margin-top:5%">
+<form action="/editStaffProfile" method="POST" style="width:400px">
     <label for="name">Name:</label>
-    <input type="text" name="name" id="name" value="{{Staff[1]}}" required minlength="3" maxlength="50" pattern="[A-Za-z]">
-
+    <input class="form-control" type="text" name="name" id="name" value="{{Staff[1]}}" required minlength="3" maxlength="50" pattern="[A-Za-z]+">
+    <Small class="form-text text-muted"> (Only alphabets length 3-50) </Small><br>
+    <br>
     <label for="email">Email:</label>
-    <input type="email" name="email" id="email" value="{{Staff[2]}}" required>
-
+    <input class="form-control" type="email" name="email" id="email" value="{{Staff[2]}}" required>
+    <br>
     <label for="contact">Contact:</label>
-    <input type="text" name="contact" id="contact" value="{{Staff[3]}}" required pattern="[0-9]{10}">
+    <input class="form-control" type="text" name="contact" id="contact" value="{{Staff[3]}}" required pattern="[0-9]{10}">
+    <Small class="form-text text-muted"> (without any country code) </Small><br>
+    <br>
+    <a class="btn btn-secondary" href="/staffProfile">Cancel</a>
 
-    <a href="/staffProfile">Cancel</a>
-    <input type="submit" value="Save">
+    <button class="btn btn-primary" type="submit">Save</button>
 </form>
+</div>
 
 {% endblock %}

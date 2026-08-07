@@ -4,17 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trekker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+
 </head>
 <body>
-    <div id="navbar">
-        <h3>Trekker</h3>
-        <a href="/trekkerDashboard">Dashboard</a>
-        <a href="/trekkerProfile">Profile</a>
-        <a href="/trekkerTreks">Treks</a>
-        <a href="/bookedTreks">Bookings</a>
-        <a href="/trekkerHistory">Trek History</a>
-        <a href="/logout">Logout</a>
+    <nav class="navbar navbar-expand-md bg-body-tertiary">
+    <div class="container-fluid">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTogglerDemo01" aria-controls="navbarTogglerDemo01" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
+        <a class="navbar-brand" href="#">TrekTerrain</a>
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+            <a class="nav-link" href="/trekkerDashboard">Home</a>
+            </li>
+            <li class="nav-item">
+            <a class="nav-link" href="/trekkerProfile">Profile</a>
+            </li>
+            <li class="nav-item">
+            <a class="nav-link" href="/trekkerTreks">Treks</a>
+            </li>
+            <li class="nav-item">
+            <a class="nav-link" href="/bookedTreks">Bookings</a>
+            </li>
+            <li class="nav-item">
+            <a class="nav-link" href="/trekkerHistory">Trek History</a>
+            </li>
+            <li class="nav-item">
+            <button class="btn btn-primary"><a href="/logout" style="color:white; text-decoration:none;">Logout</a></button>
+            </li>
+        </ul>
+        </div>
     </div>
+    </nav>
     <div id="content">
         {% with messages=get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -26,5 +49,6 @@
         {% block content %}
         {% endblock %}
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 </body>
 </html>

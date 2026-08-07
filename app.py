@@ -176,7 +176,10 @@ def addTrek():
         TrekS=request.form.get("sDate")
         TrekE=request.form.get("eDate")
         TrekSlot=request.form.get("Slot")
-        TrekStaff=request.form.get("StaffId") or None
+        TrekStaff=request.form.get("StaffId")
+        TrekStaff=request.form.get("StaffId")
+        if(TrekStaff==""):
+            TrekStaff=None
         if TrekE<TrekS:
             flash("End date must be after start date")
             conn.close()
@@ -185,7 +188,12 @@ def addTrek():
         conn.commit()
         conn.close()
         return redirect("/adminTreks")
-    return render_template("addTrek.html")
+    conn=sqlite3.connect("TrekManagement.db")
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor=conn.cursor()
+    cursor.execute("Select UserId,Fullname from User where UserRole='Staff'")
+    staffs=cursor.fetchall()
+    return render_template("addTrek.html",staffs=staffs)
 
 @app.route("/adminTreks", methods=["GET","POST"])
 def adminTreks():
@@ -231,7 +239,9 @@ def editTrek(TrekId):
         TrekS=request.form.get("sDate")
         TrekE=request.form.get("eDate")
         TrekSlot=request.form.get("Slot")
-        TrekStaff=request.form.get("StaffId") or None
+        TrekStaff=request.form.get("StaffId")
+        if(TrekStaff==""):
+            TrekStaff=None
         TrekStatus=request.form.get("Status")
         if TrekE<TrekS:
             flash("End date must be after start date")
@@ -241,11 +251,20 @@ def editTrek(TrekId):
             TrekName,TrekDifficulty,TrekLocation,TrekDuration,TrekS,TrekE,TrekSlot,TrekStaff,TrekStatus,TrekId))
         conn.commit()
         conn.close()
+        flash("Trek has been updated")
         return redirect("/adminTreks")
     
     cursor.execute("Select * from Trek where TrekId=?",(TrekId,))
     trek=cursor.fetchone()
-    return render_template("editTrek.html",trek=trek)
+    cursor.execute("Select u.UserId from User u, Trek t where u.UserId=t.StaffId and t.TrekId=?",(TrekId,))
+    row=cursor.fetchone()
+    cursor.execute("Select UserId,Fullname from User where UserRole='Staff'")
+    staffs=cursor.fetchall()
+    if row:
+        staffId=row[0]
+    else:
+        staffId=None
+    return render_template("editTrek.html",trek=trek,staffs=staffs,staffId=staffId)
 
 @app.route("/removeTrek/<int:TrekId>")
 def removeTrek(TrekId):
@@ -672,8 +691,10 @@ def markOngoing(trekId):
     cursor=conn.cursor()
     cursor.execute("Update Trek set Status='Ongoing' where trekId=?",(trekId,))
     conn.commit()
+    cursor.execute("Select * from Trek where trekId=?",(trekId,))
+    trek=cursor.fetchone()
     conn.close()
-    return redirect(url_for("manageTrekS",trekId=trekId))
+    return render_template("manageTrekS.html",trek=trek)
 
 @app.route("/markCompleted/<int:trekId>")
 def markCompleted(trekId):
