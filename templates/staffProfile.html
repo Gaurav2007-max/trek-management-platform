@@ -1,11 +1,21 @@
 {% extends "staffLayout.html" %}
 {% block content %}
+<div class="d-flex"> 
+<div class="card mx-4 my-4">
+  <div class="card-body">
+    <h5 class="card-title">Name:{{Staff[1]}}</h5>
+    <h6 class="card-subtitle mb-2 text-body-secondary">Staff ID:{{Staff[0]}}</h6>
+    <p class="card-text"><div>
+        Email : {{Staff[2]}}<br>
+        Contact : {{Staff[3]}}<br>
+        Completed Treks: {{c}}
+    </div></p>
+    <a class="btn btn-primary" href="/editStaffProfile">Edit Profile</a>
+  </div>
+  </div>
+</div>
 
-Staff ID : {{Staff[0]}}
-Name : {{Staff[1]}}
-Email : {{Staff[2]}}
-Contact : {{Staff[3]}}
-Completed Treks: {{c}}
-<a href="/editStaffProfile">Edit Profile</a>
+
+
 
 {% endblock %}

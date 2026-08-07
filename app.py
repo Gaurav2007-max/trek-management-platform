@@ -153,12 +153,12 @@ def adminDashboard():
     cursor.execute("Select count(BookingId) from Booking")
     TotalBookings=cursor.fetchone()[0]
     cursor.execute("Select BookingId,FullName,TrekName,BookingStatus,BookingDate from Booking b, Trek t, User U where b.TrekId=t.TrekId and b.UserId=U.UserId Order By BookingDate DESC limit 5")
-    Bookings=cursor.fetchall()  
+    bookings=cursor.fetchall()  
     Id=session.get("UserId")
     cursor.execute("Select * from User where UserId=?",(Id,))  
     UserInfo=cursor.fetchone()
     conn.close()
-    return render_template("adminDashboard.html",TotalTreks=TotalTreks,TotalUsers=TotalUsers,TotalStaff=TotalStaff,TotalBookings=TotalBookings,Bookings=Bookings,UserInfo=UserInfo)
+    return render_template("adminDashboard.html",TotalTreks=TotalTreks,TotalUsers=TotalUsers,TotalStaff=TotalStaff,TotalBookings=TotalBookings,bookings=bookings,UserInfo=UserInfo)
 
 @app.route('/addTrek',methods=["GET","POST"])
 def addTrek():
@@ -556,7 +556,7 @@ def staffDashboard():
     Id=session.get("UserId")
     cursor.execute("Select * from User where UserId=?",(Id,))  
     UserInfo=cursor.fetchone()
-    cursor.execute("Select TrekId, TrekName, Location, Participants, Slot, Status from Trek where StaffId=?",(Id,))
+    cursor.execute("Select TrekId, TrekName, Location, Participants, Slot, Status from Trek where StaffId=? Limit 3",(Id,))
     aTreks=cursor.fetchall()
     cursor.execute("Select COUNT(TrekId) from Trek where StaffId=?",(Id,))
     a=cursor.fetchone()[0]
@@ -859,7 +859,7 @@ def bookedTreks():
     conn.execute("PRAGMA foreign_keys = ON;")
     cursor=conn.cursor()
     Id=session.get("UserId")
-    cursor.execute("SELECT BookingId,TrekName,BookingDate,StartDate,Duration_HRS,BookingStatus,TrekId from Trek t,Booking b where b.TrekId=t.TrekId and b.UserId=?",(Id,))
+    cursor.execute("SELECT BookingId,TrekName,BookingDate,StartDate,Duration_HRS,BookingStatus,t.TrekId from Trek t,Booking b where b.TrekId=t.TrekId and b.UserId=?",(Id,))
     bookings=cursor.fetchall()
     conn.close()
     return render_template("bookedTreks.html",bookings=bookings)

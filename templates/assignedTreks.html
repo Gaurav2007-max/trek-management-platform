@@ -1,14 +1,42 @@
 {% extends "staffLayout.html" %}
 {% block content %}
-
+<div class="table-responsive " style="padding:10px">
+<h5>Assigned Treks</h5>
 {% if aTreks %}
-{% for aTrek in aTreks %}
-{{aTrek[1]}}
-<a href="/trekDetailS/{{aTrek[0]}}">View Details</a>
-<a href="/manageTrekS/{{aTrek[0]}}">Update</a>
+<table class="table table-striped table-hover" style="margin-top:10px; ">
+    <thead class="table-primary">
+    <tr>
+<th>S.No</th>
+<th>Trek Name</th>
+<th>Difficulty</th>
+<th>Location</th>
+<th>Duration</th>
+<th>Slots</th>
+<th>Start Date</th>
+<th>Status</th>
+<th>Participants</th>
+<th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for aTrek in aTreks %}
+    <tr>
+<td>{{loop.index}}</td>
+<td>{{aTrek[1]}}</td>
+<td>{{aTrek[2]}}</td>
+<td>{{aTrek[3]}}</td>
+<td>{{aTrek[4]}}</td>
+<td>{{aTrek[7]}}</td>
+<td>{{aTrek[5]}}</td>
+<td>{{aTrek[9]}}</td>
+<td>{{aTrek[10]}}</td>
+<td><a class="btn btn-secondary" href='/manageTrekS/{{aTrek[0]}}'>Manage</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
 {% else %}
-No Treks Assigned to you
-{% endfor %}
+<p>No Assigned Treks</p>
 {% endif %}
-
 {% endblock %}
