@@ -1,10 +1,18 @@
 {% extends "trekkerLayout.html" %}
 {% block content %}
 
-Trekker ID : {{Trekker[0]}}
-Name : {{Trekker[1]}}
-Email : {{Trekker[2]}}
-Contact : {{Trekker[3]}}
-Completed Treks: {{c}}
-<a href="/editTrekkerProfile">Edit Profile</a>
+<div class="d-flex"> 
+<div class="card mx-4 my-4">
+  <div class="card-body">
+    <h5 class="card-title">Name : {{Trekker[1]}}</h5>
+    <h6 class="card-subtitle mb-2 text-body-secondary">Trekker ID : {{Trekker[0]}}</h6>
+    <p class="card-text"><div>
+        Email : {{Trekker[2]}}<br>
+        Contact : {{Trekker[3]}}<br>
+        Completed Treks: {{c}}
+    </div></p>
+    <a class="btn btn-primary" href="/editTrekkerProfile">Edit Profile</a>
+  </div>
+  </div>
+</div>
 {% endblock %}

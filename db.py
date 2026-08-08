@@ -4,7 +4,7 @@ conn=sqlite3.connect("TrekManagement.db")
 
 cursor=conn.cursor()
 
-cursor.execute("""Create table User (
+cursor.execute("""CREATE TABLE IF NOT EXISTS User (
                UserId INTEGER PRIMARY KEY autoincrement,
                FullName TEXT,
                UserEmail TEXT UNIQUE,
@@ -13,7 +13,7 @@ cursor.execute("""Create table User (
                Contact TEXT
                );""")
 
-cursor.execute("""Create table Trek (
+cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
                TrekId INTEGER PRIMARY KEY autoincrement,
                TrekName TEXT Not Null,
                Difficulty TEXT,
@@ -28,7 +28,7 @@ cursor.execute("""Create table Trek (
                FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
                );""")
 
-cursor.execute("""Create table Booking (
+cursor.execute("""CREATE TABLE IF NOT EXISTS Booking (
                BookingId INTEGER PRIMARY KEY autoincrement,
                UserId INTEGER, 
                TrekId INTEGER,
@@ -39,7 +39,7 @@ cursor.execute("""Create table Booking (
                FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
                );""")
 
-cursor.execute("""Create table StaffReq (
+cursor.execute("""CREATE TABLE IF NOT EXISTS StaffReq (
                ReqId INTEGER PRIMARY KEY autoincrement,
                Name TEXT,
                Email TEXT,
@@ -47,7 +47,7 @@ cursor.execute("""Create table StaffReq (
                Contact TEXT
                );""")
 
-cursor.execute("""Create table History (
+cursor.execute("""CREATE TABLE IF NOT EXISTS History (
                 BookingId INTEGER,
                 TrekkerId INTEGER,
                 TrekkerName TEXT,
@@ -60,9 +60,9 @@ cursor.execute("""Create table History (
                 BookingDate Date,
                 Status TEXT
                 );""")
-
-
-cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","15022026","Admin",Null);""")
-
+cursor.execute("Select * from User where UserEmail='aroraganesh2007@gmail.com'")
+row=cursor.fetchone()
+if(not row):
+   cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","15022026","Admin",Null);""")
 conn.commit()
 conn.close()

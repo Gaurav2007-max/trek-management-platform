@@ -2,7 +2,7 @@
 {% block content %}
 <div style="padding:10px">
 <form class="d-flex justify-content-center align-items-center" role="search" action="/adminBookings" method="POST">
-        <input class="form-control me-2" type="text" placeholder="Enter id or name" aria-label="Search"/>
+        <input class="form-control me-2" name="NameorId" type="text" placeholder="Enter id or name" aria-label="Search"/>
         <select class="btn btn-outline-primary" id="SearchBy" name="SearchBy" style="margin-right:2%;margin-left:2%">
             <option value="BookingId">Booking Id</option>
             <option value="TrekIdorName">Trek Id or Name</option>

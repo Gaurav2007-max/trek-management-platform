@@ -3,16 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment</title>
+    <title>Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
 <body>
-    <form action="/bookTrek/{{TrekId}}" method="POST">
-        <label for="CRN">CRN:</label>
-        <input type="number" name="CRN" id="CRN">
-
-        <label for="Password">Password:</label>
-        <input type="password" name="password" id="password">
-        <input type="submit" value="Confirm">
-    </form>
+    <div class="d-flex flex-column justify-content-center align-items-center vh-100"> 
+        <div id="flash">
+            {% with messages=get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for message in messages %}
+            {{message}}
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+        </div>
+        <div id="form">
+        <form action="/bookTrek/{{TrekId}}" method="POST">
+            <label for="CRN"> CRN</label>
+            <input class="form-control" id="username" type="email" name="Username" required maxlength="100">
+            
+            <label for="password">Password </label>
+            <input class="form-control" id="password" type="password" name="Password" required minlength="6" maxlength="30"><br>
+            <div>
+                <button type="submit" class="btn btn-primary" value="Submit">Submit</button>
+            </div>
+        </form>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 </body>
 </html>
