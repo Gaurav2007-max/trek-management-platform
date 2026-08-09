@@ -6,13 +6,36 @@
     <title>Access Denied</title>
 </head>
 <body>
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-        {% for message in messages %}
-            <p>{{ message }}</p>
-        {% endfor %}
-    {% endif %}
-    {% endwith %}
+    <div class="d-flex justify-content-center align-items-center">
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category == 'success' %}
+                        <div class="alert alert-success alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Success!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% elif category == 'error' %}
+                        <div class="alert alert-danger alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Error!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% elif category == 'warning' %}
+                        <div class="alert alert-warning alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Warning!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Message!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
     <h1>403:Access Denied</h1>
     <p>You do not have permission to access this page.</p>
     <a href="/">Go to Dashboard</a>

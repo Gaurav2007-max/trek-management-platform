@@ -1,8 +1,8 @@
 {% extends "adminLayout.html" %}
 
 {% block content %}
-Welcome {{UserInfo[1]}}
 <div id="carouselExampleInterval" class="carousel slide py-2 px-3" data-bs-ride="carousel" style="height:auto ;max-height:400px">
+  <h5>Welcome {{UserInfo[1]}}</h5>
   <div class="carousel-inner h-40" >
     <div class="carousel-item active"  data-bs-interval="3000">
       <img src="{{url_for('static',filename='img1.jpg')}}" style="height: auto; max-height: 400px;" class="d-block w-100" alt="i1">
@@ -23,7 +23,7 @@ Welcome {{UserInfo[1]}}
     <span class="visually-hidden">Next</span>
   </button>
 </div>
-<br>
+<br><br><br>
 <div class="container overflow-hidden text-center my-2">
   <div class="row gy-5">
     <div class="col-6" >

@@ -4,7 +4,7 @@
 <div id="form" class="d-flex flex-column justify-content-center align-items-center vh-80" style="margin-top:5%">
 <form action="/editTrekkerProfile" method="POST" style="width:400px">
     <label for="name">Name:</label>
-    <input class="form-control" type="text" name="name" id="name" value="{{Trekker[1]}}" required minlength="3" maxlength="50" pattern="[A-Za-z]+">
+    <input class="form-control" type="text" name="name" id="name" value="{{Trekker[1]}}" required minlength="3" maxlength="50" pattern="[A-Za-z ]+">
     <Small class="form-text text-muted"> (Only alphabets length 3-50) </Small><br>
     <br>
     <label for="email">Email:</label>
