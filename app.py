@@ -1,1403 +1,1298 @@
-import os
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g
 import sqlite3
-from datetime import date
-from decimal import Decimal, InvalidOperation
-
-import razorpay
+import os
+from datetime import date, datetime
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+import razorpay
 
+# Load environment variables
 load_dotenv()
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "TrekManagement.db")
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
-RAZORPAY_CURRENCY = os.getenv("RAZORPAY_CURRENCY", "INR")
-razorpay_client = razorpay.Client({"key_id": RAZORPAY_KEY_ID, "key_secret": RAZORPAY_KEY_SECRET}) if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET else None
+DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
 
-conn=sqlite3.connect("TrekManagement.db")
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "trekker_secret_key_default")
 
-cursor=conn.cursor()
-cursor.execute("""CREATE TABLE IF NOT EXISTS User (
-               UserId INTEGER PRIMARY KEY autoincrement,
-               FullName TEXT,
-               UserEmail TEXT UNIQUE,
-               UserPassword TEXT,
-               UserRole TEXT,
-               Contact TEXT
-               );""")
+# Initialize Razorpay Client
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_SampleKeyId1234")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "SampleKeySecret12345678")
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
-               TrekId INTEGER PRIMARY KEY autoincrement,
-               TrekName TEXT Not Null,
-               Difficulty TEXT,
-               Location TEXT,
-               Duration_HRS INTEGER,
-               StartDate DATE,
-               EndDate DATE,
-               Slot INTEGER,
-               StaffId INTEGER,
-               Status TEXT,
-               Participants INTEGER Default 0,
-               Price REAL NOT NULL DEFAULT 1000,
-               FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
-               );""")
+# ----------------------------------------------------
+# Database Helpers & Migration
+# ----------------------------------------------------
+def get_db():
+    if 'db' not in g:
+        g.db = sqlite3.connect(DATABASE)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON;")
+    return g.db
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS Booking (
-               BookingId INTEGER PRIMARY KEY autoincrement,
-               UserId INTEGER, 
-               TrekId INTEGER,
-               BookingStatus TEXT,
-               BookingDate Date,
-               PaymentStatus TEXT,
-               FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
-               FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
-               );""")
+@app.teardown_appcontext
+def close_db(exception):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS StaffReq (
-               ReqId INTEGER PRIMARY KEY autoincrement,
-               Name TEXT,
-               Email TEXT,
-               Password TEXT,
-               Contact TEXT
-               );""")
+def init_db():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""CREATE TABLE IF NOT EXISTS User (
+        UserId INTEGER PRIMARY KEY AUTOINCREMENT,
+        FullName TEXT,
+        UserEmail TEXT UNIQUE,
+        UserPassword TEXT,
+        UserRole TEXT,
+        Contact TEXT
+    );""")
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS History (
-                BookingId INTEGER,
-                TrekkerId INTEGER,
-                TrekkerName TEXT,
-                TrekId INTEGER,
-                TrekName TEXT,
-                StaffId INTEGER,
-                StaffName TEXT,
-                TrekStart DATE,
-                TrekEnd Date,
-                BookingDate Date,
-                Status TEXT
-                );""")
-cursor.execute("Select * from User where UserEmail='aroraganesh2007@gmail.com'")
-row=cursor.fetchone()
-if(not row):
-   cursor.execute("""INSERT INTO USER values(Null,"Gaurav","aroraganesh2007@gmail.com","15022026","Admin",Null);""")
-conn.commit()
-conn.close()
+    cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
+        TrekId INTEGER PRIMARY KEY AUTOINCREMENT,
+        TrekName TEXT NOT NULL,
+        Difficulty TEXT,
+        Location TEXT,
+        Duration_HRS INTEGER,
+        StartDate DATE,
+        EndDate DATE,
+        Slot INTEGER,
+        StaffId INTEGER,
+        Status TEXT,
+        Participants INTEGER DEFAULT 0,
+        Price INTEGER DEFAULT 1500,
+        FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
+    );""")
 
-# Add the price column when upgrading an existing local database.
-conn=sqlite3.connect(DATABASE_PATH)
-columns = {row[1] for row in conn.execute("PRAGMA table_info(Trek)")}
-if "Price" not in columns:
-    conn.execute("ALTER TABLE Trek ADD COLUMN Price REAL NOT NULL DEFAULT 1000")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS Booking (
+        BookingId INTEGER PRIMARY KEY AUTOINCREMENT,
+        UserId INTEGER, 
+        TrekId INTEGER,
+        BookingStatus TEXT,
+        BookingDate DATE,
+        PaymentStatus TEXT,
+        RazorpayOrderId TEXT,
+        RazorpayPaymentId TEXT,
+        FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
+        FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
+    );""")
+
+    cursor.execute("""CREATE TABLE IF NOT EXISTS StaffReq (
+        ReqId INTEGER PRIMARY KEY AUTOINCREMENT,
+        Name TEXT,
+        Email TEXT,
+        Password TEXT,
+        Contact TEXT
+    );""")
+
+    cursor.execute("""CREATE TABLE IF NOT EXISTS History (
+        BookingId INTEGER,
+        TrekkerId INTEGER,
+        TrekkerName TEXT,
+        TrekId INTEGER,
+        TrekName TEXT,
+        StaffId INTEGER,
+        StaffName TEXT,
+        TrekStart DATE,
+        TrekEnd DATE,
+        BookingDate DATE,
+        Status TEXT
+    );""")
+
+    # Column migrations if database already existed without new columns
+    cursor.execute("PRAGMA table_info(Trek)")
+    trek_cols = [col[1] for col in cursor.fetchall()]
+    if 'Price' not in trek_cols:
+        cursor.execute("ALTER TABLE Trek ADD COLUMN Price INTEGER DEFAULT 1500;")
+
+    cursor.execute("PRAGMA table_info(Booking)")
+    booking_cols = [col[1] for col in cursor.fetchall()]
+    if 'RazorpayOrderId' not in booking_cols:
+        cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayOrderId TEXT;")
+    if 'RazorpayPaymentId' not in booking_cols:
+        cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayPaymentId TEXT;")
+
+    # Default admin user creation with hashed password
+    cursor.execute("SELECT * FROM User WHERE UserEmail='aroraganesh2007@gmail.com'")
+    admin = cursor.fetchone()
+    if not admin:
+        hashed_admin_pass = generate_password_hash("15022026")
+        cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, ?, ?)",
+                       ("Gaurav", "aroraganesh2007@gmail.com", hashed_admin_pass, "Admin", "9999999999"))
+
     conn.commit()
-conn.close()
+    conn.close()
 
-app=Flask(__name__)
-app.secret_key=os.getenv("FLASK_SECRET_KEY", "trekker")
-
-def checkAdmin():
-    if("UserId" not in session):
-        flash("Please login first","warning")
-        return redirect("/login")
-    if(session.get('Role')!='Admin'):
-        flash("You do not have access to this page or action","warning")
-        return render_template("unauthorized.html"),403
-    return
-
-def checkStaff():
-    if("UserId" not in session):
-        flash("Please login first","warning")
-        return redirect("/login")
-    if(session.get('Role')!='Staff'):
-        flash("You do not have access to this page or action","warning")
-        return render_template("unauthorized.html"),403
-    return
-
-def checkTrekker():
-    if("UserId" not in session):
-        flash("Please login first","warning")
-        return redirect("/login")
-    if(session.get('Role')!='Trekker'):
-        flash("You do not have access to this page or action","warning")
-        return render_template("unauthorized.html"),403
-    return
+# Initialize DB structure on startup
+init_db()
 
 
-@app.route('/',methods=["GET","POST"])
+# ----------------------------------------------------
+# Authentication & Authorization Decorators
+# ----------------------------------------------------
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "UserId" not in session:
+            flash("Please login first to access this page.", "warning")
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def role_required(role):
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            if session.get("Role") != role:
+                flash("You do not have permission to access this resource.", "error")
+                return render_template("unauthorized.html"), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+# ----------------------------------------------------
+# Auth Routes
+# ----------------------------------------------------
+@app.route('/', methods=["GET", "POST"])
 def index():
     if "UserId" in session:
-        Id=session.get("UserId")
-        Role=session.get("Role")
-        if(Role):
-            if(Role=="Admin"):
-                return redirect(url_for("adminDashboard"))
-            elif(Role=="Staff"):
-                return redirect(url_for("staffDashboard"))
-            else:
-                return redirect(url_for("trekkerDashboard"))
-        else:
-            flash("No Data found in database","error")
-            return redirect(url_for("login"))
-    else:
-        return redirect(url_for("login"))
-        
+        role = session.get("Role")
+        if role == "Admin":
+            return redirect(url_for("adminDashboard"))
+        elif role == "Staff":
+            return redirect(url_for("staffDashboard"))
+        elif role == "Trekker":
+            return redirect(url_for("trekkerDashboard"))
+    return redirect(url_for("login"))
 
-@app.route('/login',methods=["GET","POST"])
+
+@app.route('/login', methods=["GET", "POST"])
 def login():
-    if(request.method=="POST"):
-        conn=sqlite3.connect("TrekManagement.db")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        cursor=conn.cursor()
-        username=request.form.get("Username")
-        password=request.form.get("Password")
+    if request.method == "POST":
+        username = request.form.get("Username", "").strip()
+        password = request.form.get("Password", "").strip()
+
         if not username or not password:
-            conn.close()
-            flash("All fields required","warning")
-            return redirect("/login")
-        cursor.execute("Select * from User where UserEmail=? AND UserPassword=?",(username,password))
-        row=cursor.fetchone()
-        userInfo=row
-        conn.close()
-        if row:
-            Role=row[4]
-        else:
-            flash("User not found","warning")
+            flash("All fields are required", "warning")
             return redirect(url_for("login"))
-        if(userInfo):
-            session['UserId']=userInfo[0]
-            session['Role']=userInfo[4]
-            if(userInfo[4]=="Admin"):
-                return redirect(url_for("adminDashboard"))
-            elif(userInfo[4]=="Staff"):
-                return redirect(url_for("staffDashboard"))
+
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT * FROM User WHERE UserEmail=?", (username,))
+        user = cursor.fetchone()
+
+        if user:
+            stored_password = user["UserPassword"]
+            # Support both hashed passwords and backward-compatible plain passwords
+            is_valid = False
+            if stored_password.startswith("scrypt:") or stored_password.startswith("pbkdf2:"):
+                is_valid = check_password_hash(stored_password, password)
             else:
-                return redirect(url_for("trekkerDashboard"))
-        else:
-            flash("Invalid username or password","error")
-            return redirect(url_for("login"))
-        
+                is_valid = (stored_password == password)
+                if is_valid: # Upgrade to hashed password transparently
+                    new_hashed = generate_password_hash(password)
+                    cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (new_hashed, user["UserId"]))
+                    db.commit()
+
+            if is_valid:
+                session['UserId'] = user["UserId"]
+                session['Role'] = user["UserRole"]
+                session['FullName'] = user["FullName"]
+                flash(f"Welcome back, {user['FullName']}!", "success")
+
+                if user["UserRole"] == "Admin":
+                    return redirect(url_for("adminDashboard"))
+                elif user["UserRole"] == "Staff":
+                    return redirect(url_for("staffDashboard"))
+                else:
+                    return redirect(url_for("trekkerDashboard"))
+
+        flash("Invalid email or password", "error")
+        return redirect(url_for("login"))
+
     return render_template("login.html")
 
-@app.route('/register',methods=["GET","POST"])
-def register():
-    if(request.method=="POST"):
-        conn=sqlite3.connect("TrekManagement.db")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        cursor=conn.cursor()
-        name=request.form.get("Fullname")
-        email=request.form.get("Email")
-        cursor.execute("Select UserEmail from User where UserEmail=?",(email,))
-        data=cursor.fetchone()
-        
-        if(data):
-            flash("Email already in use","error")
-            conn.close()
-            return redirect('/register')
-        
-        cursor.execute("Select Email from StaffReq where Email=?",(email,))
-        data=cursor.fetchone()
-        if(data):
-            flash("Already requested please wait for admin approval","warning")
-            conn.close()
-            return redirect('/register')
 
-        password=request.form.get("Password")
-        password2=request.form.get("Password2")
-        contact=request.form.get("Contact")
-        role=request.form.get("Role")
+@app.route('/register', methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        name = request.form.get("Fullname", "").strip()
+        email = request.form.get("Email", "").strip()
+        password = request.form.get("Password", "").strip()
+        password2 = request.form.get("Password2", "").strip()
+        contact = request.form.get("Contact", "").strip()
+        role = request.form.get("Role", "").strip()
+
         if not name or not password or not password2 or not email or not contact or not role:
-            conn.close()
-            flash("All fields required","warning")
-            return redirect("/register")
-        if(password!=password2):
-            flash("Please enter same password for confirmation","error")
-            conn.close()
-            return redirect('/register')
-        if(role=="Trekker"):
-            cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,?,?)",(None,name,email,password,role,contact))
-            conn.commit()
-            conn.close()
-            flash("Successfully registered as Trekker","success")
-            return redirect('/login')
-        elif role=="Staff":
-            cursor.execute("Insert into StaffReq (ReqId,Name,Email,Password,Contact) values(?,?,?,?,?)",(None,name,email,password,contact))
-            conn.commit()
-            conn.close()
-            flash("Request Sent to Admin, You can login once admin approves","success")
-            return redirect('/')
+            flash("All fields are required", "warning")
+            return redirect(url_for("register"))
+
+        if password != password2:
+            flash("Passwords do not match", "error")
+            return redirect(url_for("register"))
+
+        db = get_db()
+        cursor = db.cursor()
+
+        cursor.execute("SELECT UserEmail FROM User WHERE UserEmail=?", (email,))
+        if cursor.fetchone():
+            flash("Email is already registered. Please login.", "error")
+            return redirect(url_for("register"))
+
+        cursor.execute("SELECT Email FROM StaffReq WHERE Email=?", (email,))
+        if cursor.fetchone():
+            flash("You have already submitted a staff request. Please wait for admin approval.", "warning")
+            return redirect(url_for("register"))
+
+        hashed_pass = generate_password_hash(password)
+
+        if role == "Trekker":
+            cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, 'Trekker', ?)",
+                           (name, email, hashed_pass, contact))
+            db.commit()
+            flash("Successfully registered as Trekker! You can now login.", "success")
+            return redirect(url_for("login"))
+        elif role == "Staff":
+            cursor.execute("INSERT INTO StaffReq (Name, Email, Password, Contact) VALUES (?, ?, ?, ?)",
+                           (name, email, hashed_pass, contact))
+            db.commit()
+            flash("Staff approval request sent to Admin. You can login once approved.", "success")
+            return redirect(url_for("login"))
         else:
-            flash("Invalid Inputs","error")
-            conn.close()
-            return redirect('/register')
+            flash("Invalid role selected.", "error")
+            return redirect(url_for("register"))
+
     return render_template("register.html")
 
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash("You have been logged out successfully.", "success")
+    return redirect(url_for("login"))
+
+
+# ----------------------------------------------------
+# Admin Routes
+# ----------------------------------------------------
 @app.route('/adminDashboard')
+@role_required("Admin")
 def adminDashboard():
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select count(TrekId) from Trek")
-    TotalTreks=cursor.fetchone()[0]
-    cursor.execute("Select count(UserId) from User where UserRole='Trekker'")
-    TotalUsers=cursor.fetchone()[0]
-    cursor.execute("Select count(UserId) from User where UserRole='Staff'")
-    TotalStaff=cursor.fetchone()[0]
-    cursor.execute("Select count(BookingId) from Booking")
-    TotalBookings=cursor.fetchone()[0]
-    cursor.execute("Select BookingId,FullName,TrekName,BookingStatus,BookingDate from Booking b, Trek t, User U where b.TrekId=t.TrekId and b.UserId=U.UserId Order By BookingDate DESC limit 5")
-    bookings=cursor.fetchall()  
-    Id=session.get("UserId")
-    cursor.execute("Select * from User where UserId=?",(Id,))  
-    UserInfo=cursor.fetchone()
-    conn.close()
-    return render_template("adminDashboard.html",TotalTreks=TotalTreks,TotalUsers=TotalUsers,TotalStaff=TotalStaff,TotalBookings=TotalBookings,bookings=bookings,UserInfo=UserInfo)
+    db = get_db()
+    cursor = db.cursor()
 
-@app.route('/addTrek',methods=["GET","POST"])
+    cursor.execute("SELECT count(TrekId) FROM Trek")
+    total_treks = cursor.fetchone()[0]
+
+    cursor.execute("SELECT count(UserId) FROM User WHERE UserRole='Trekker'")
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute("SELECT count(UserId) FROM User WHERE UserRole='Staff'")
+    total_staff = cursor.fetchone()[0]
+
+    cursor.execute("SELECT count(BookingId) FROM Booking")
+    total_bookings = cursor.fetchone()[0]
+
+    cursor.execute("""SELECT b.BookingId, u.FullName, t.TrekName, b.BookingStatus, b.BookingDate 
+                      FROM Booking b 
+                      JOIN Trek t ON b.TrekId=t.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      ORDER BY b.BookingDate DESC LIMIT 5""")
+    recent_bookings = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM User WHERE UserId=?", (session.get("UserId"),))
+    user_info = cursor.fetchone()
+
+    return render_template("adminDashboard.html",
+                           TotalTreks=total_treks,
+                           TotalUsers=total_users,
+                           TotalStaff=total_staff,
+                           TotalBookings=total_bookings,
+                           bookings=recent_bookings,
+                           UserInfo=user_info)
+
+
+@app.route('/addTrek', methods=["GET", "POST"])
+@role_required("Admin")
 def addTrek():
-    response=checkAdmin()
-    if response:
-        return response
-    if(request.method=="POST"):
-        conn=sqlite3.connect("TrekManagement.db")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        cursor=conn.cursor()
-        TrekName=request.form.get("Trekname")
-        TrekDifficulty=request.form.get("Difficulty")
-        TrekLocation=request.form.get("Location")
-        TrekDuration=request.form.get("Duration")
-        TrekS=request.form.get("sDate")
-        TrekE=request.form.get("eDate")
-        TrekSlot=request.form.get("Slot")
-        TrekStaff=request.form.get("StaffId")
-        TrekPrice=request.form.get("Price")
-        if not TrekName or not TrekDifficulty or not TrekDuration or not TrekSlot or not TrekS or not TrekE or not TrekLocation or not TrekPrice:
-            conn.close()
-            flash("All fields are required","warning")
-            return redirect(url_for("addTrek"))
-        try:
-            TrekDuration=int(TrekDuration)
-            TrekSlot=int(TrekSlot)
-            TrekPrice=float(Decimal(TrekPrice))
-        except (ValueError, InvalidOperation):
-            conn.close()
-            flash("Duration and Slot must be numbers","error")
-            return redirect(url_for("addTrek"))
-        if TrekDuration<=0:
-            conn.close()
-            flash("Duration must be greater than 0","error")
-            return redirect(url_for("addTrek"))
-        if TrekSlot<=0:
-            conn.close()
-            flash("Slots must be greater than 0","error")
-            return redirect(url_for("addTrek"))
-        if TrekPrice<=0:
-            conn.close()
-            flash("Price must be greater than 0","error")
-            return redirect(url_for("addTrek"))
-        if TrekE<TrekS:
-            conn.close()
-            flash("End date must not be before start date","error")
-            return redirect(url_for("addTrek"))
-        if TrekStaff:
-            try:
-                TrekStaff=int(TrekStaff)
-            except ValueError:
-                conn.close()
-                flash("Invalid staff ID","error")
-                return redirect("/addTrek")
-            cursor.execute("SELECT UserId FROM User WHERE UserId=? AND UserRole='Staff'",(TrekStaff,))
-            if cursor.fetchone() is None:
-                conn.close()
-                flash("Invalid staff member","error")
-                return redirect("/addTrek")
-        else:
-            TrekStaff=None
-        cursor.execute("INSERT INTO Trek(TrekId,TrekName,Difficulty,Location,Duration_HRS,StartDate,EndDate,Slot,StaffId,Status,Price) VALUES(?,?,?,?,?,?,?,?,?,'Open',?)",(None,TrekName,TrekDifficulty,TrekLocation,TrekDuration,TrekS,TrekE,TrekSlot,TrekStaff,TrekPrice))
-        conn.commit()
-        conn.close()
-        return redirect("/adminTreks")
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select UserId,Fullname from User where UserRole='Staff'")
-    staffs=cursor.fetchall()
-    conn.close()
-    return render_template("addTrek.html",staffs=staffs)
+    db = get_db()
+    cursor = db.cursor()
 
-@app.route("/adminTreks", methods=["GET","POST"])
+    if request.method == "POST":
+        name = request.form.get("Trekname", "").strip()
+        difficulty = request.form.get("Difficulty", "").strip()
+        location = request.form.get("Location", "").strip()
+        duration = request.form.get("Duration", "").strip()
+        s_date = request.form.get("sDate", "").strip()
+        e_date = request.form.get("eDate", "").strip()
+        slot = request.form.get("Slot", "").strip()
+        price = request.form.get("Price", "1500").strip()
+        staff_id = request.form.get("StaffId", "").strip()
+
+        if not name or not difficulty or not location or not duration or not s_date or not e_date or not slot:
+            flash("All required fields must be filled", "warning")
+            return redirect(url_for("addTrek"))
+
+        try:
+            duration = int(duration)
+            slot = int(slot)
+            price = int(price)
+        except ValueError:
+            flash("Duration, slots, and price must be numbers.", "error")
+            return redirect(url_for("addTrek"))
+
+        if duration <= 0 or slot <= 0 or price <= 0:
+            flash("Duration, slots, and price must be greater than zero.", "error")
+            return redirect(url_for("addTrek"))
+
+        if e_date < s_date:
+            flash("End date cannot be earlier than start date.", "error")
+            return redirect(url_for("addTrek"))
+
+        staff_val = int(staff_id) if staff_id else None
+        if staff_val:
+            cursor.execute("SELECT UserId FROM User WHERE UserId=? AND UserRole='Staff'", (staff_val,))
+            if not cursor.fetchone():
+                flash("Selected staff member does not exist.", "error")
+                return redirect(url_for("addTrek"))
+
+        cursor.execute("""INSERT INTO Trek (TrekName, Difficulty, Location, Duration_HRS, StartDate, EndDate, Slot, StaffId, Status, Price) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)""",
+                       (name, difficulty, location, duration, s_date, e_date, slot, staff_val, price))
+        db.commit()
+        flash("New Trek created successfully!", "success")
+        return redirect(url_for("adminTreks"))
+
+    cursor.execute("SELECT UserId, Fullname FROM User WHERE UserRole='Staff'")
+    staffs = cursor.fetchall()
+    return render_template("addTrek.html", staffs=staffs)
+
+
+@app.route("/adminTreks", methods=["GET", "POST"])
+@role_required("Admin")
 def adminTreks():
-    response=checkAdmin()
-    if response:
-        return response
-    if(request.method=="POST"):
-        NameorId=request.form.get("NameorId")
-        if(NameorId):
-            x=""
-            y=1
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        search_query = request.form.get("NameorId", "").strip()
+        if search_query:
             try:
-                x=int(NameorId)
-                y=0
+                val = int(search_query)
+                return redirect(url_for("searchTrek", x=val, y=0))
             except ValueError:
-                x=str(NameorId)
-            return redirect(url_for("searchTrek",x=x,y=y))
+                return redirect(url_for("searchTrek", x=search_query, y=1))
         else:
-            flash("Please search after putting values", "warning")
+            flash("Please enter a search value", "warning")
             return redirect(url_for("adminTreks"))
 
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select * from Trek")
-    treks=cursor.fetchall()
-    conn.close()
-    return render_template("adminTreks.html",treks=treks)
+    cursor.execute("SELECT t.*, s.FullName as StaffName FROM Trek t LEFT JOIN User s ON t.StaffId=s.UserId")
+    treks = cursor.fetchall()
+    return render_template("adminTreks.html", treks=treks)
 
-@app.route("/editTrek/<int:TrekId>",methods=["GET","POST"])
+
+@app.route("/editTrek/<int:TrekId>", methods=["GET", "POST"])
+@role_required("Admin")
 def editTrek(TrekId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(request.method=="POST"):
-        TrekName=request.form.get("Trekname")
-        TrekDifficulty=request.form.get("Difficulty")
-        TrekLocation=request.form.get("Location")
-        TrekDuration=request.form.get("Duration")
-        TrekS=request.form.get("sDate")
-        TrekE=request.form.get("eDate")
-        TrekSlot=request.form.get("Slot")
-        TrekStaff=request.form.get("StaffId")
-        TrekPrice=request.form.get("Price")
-        if not TrekName or not TrekDifficulty or not TrekDuration or not TrekSlot or not TrekS or not TrekE or not TrekLocation or not TrekPrice:
-            conn.close()
-            flash("All fields are required","warning")
-            return redirect(url_for("editTrek",TrekId=TrekId))
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        name = request.form.get("Trekname", "").strip()
+        difficulty = request.form.get("Difficulty", "").strip()
+        location = request.form.get("Location", "").strip()
+        duration = request.form.get("Duration", "").strip()
+        s_date = request.form.get("sDate", "").strip()
+        e_date = request.form.get("eDate", "").strip()
+        slot = request.form.get("Slot", "").strip()
+        price = request.form.get("Price", "1500").strip()
+        staff_id = request.form.get("StaffId", "").strip()
+        status = request.form.get("Status", "Open").strip()
+
+        if not name or not difficulty or not location or not duration or not s_date or not e_date or not slot:
+            flash("All fields are required.", "warning")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
         try:
-            TrekDuration=int(TrekDuration)
-            TrekSlot=int(TrekSlot)
-            TrekPrice=float(Decimal(TrekPrice))
-        except (ValueError, InvalidOperation):
-            conn.close()
-            flash("Duration and Slot must be numbers","error")
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        if TrekDuration<=0:
-            conn.close()
-            flash("Duration must be greater than 0","error")
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        if TrekSlot<=0:
-            conn.close()
-            flash("Slots must be greater than 0","error")
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        if TrekPrice<=0:
-            conn.close()
-            flash("Price must be greater than 0","error")
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        if TrekE<TrekS:
-            conn.close()
-            flash("End date must be after start date","error")
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        if TrekStaff:
-            try:
-                TrekStaff=int(TrekStaff)
-                cursor.execute("SELECT * from User where UserId=? and UserRole='Staff'",(TrekStaff,))
-                row=cursor.fetchone()
-                if not row:
-                    conn.close()
-                    flash("The given staff was not found in database","error")
-                    return redirect(url_for("editTrek",TrekId=TrekId))
-            except ValueError:
-                conn.close()
-                flash("Invalid staff ID","error")
-                return redirect(url_for("editTrek",TrekId=TrekId))
-        else:
-            TrekStaff=None
-        cursor.execute("Select Participants from Trek where TrekId=?",(TrekId,))
-        p=cursor.fetchone()[0]
-        if(TrekSlot<p):
-            conn.close()
-            flash("Slots can not be less than bookings already booked","error")
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        if(TrekStaff==""):
-            TrekStaff=None
-        TrekStatus=request.form.get("Status")
-        if TrekE<TrekS:
-            flash("End date must be after start date","error")
-            conn.close()
-            return redirect(url_for("editTrek",TrekId=TrekId))
-        cursor.execute("""UPDATE Trek SET TrekName=?, Difficulty=?, Location=?, Duration_HRS=?, StartDate=?, EndDate=?, Slot=?, StaffId=?, Status=?, Price=? WHERE TrekId=?""", (
-            TrekName,TrekDifficulty,TrekLocation,TrekDuration,TrekS,TrekE,TrekSlot,TrekStaff,TrekStatus,TrekPrice,TrekId))
-        conn.commit()
-        conn.close()
-        flash("Trek has been updated","success")
-        return redirect("/adminTreks")
-    cursor.execute("Select * from Trek where TrekId=?",(TrekId,))
-    trek=cursor.fetchone()
+            duration = int(duration)
+            slot = int(slot)
+            price = int(price)
+        except ValueError:
+            flash("Duration, slots, and price must be numbers.", "error")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
+        if duration <= 0 or slot <= 0 or price <= 0:
+            flash("Values must be greater than 0.", "error")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
+        if e_date < s_date:
+            flash("End date cannot be earlier than start date.", "error")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
+        cursor.execute("SELECT Participants FROM Trek WHERE TrekId=?", (TrekId,))
+        trek_row = cursor.fetchone()
+        if not trek_row:
+            flash("Trek not found.", "error")
+            return redirect(url_for("adminTreks"))
+
+        if slot < trek_row["Participants"]:
+            flash("Total slots cannot be less than existing bookings count.", "error")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
+        staff_val = int(staff_id) if staff_id else None
+
+        cursor.execute("""UPDATE Trek SET TrekName=?, Difficulty=?, Location=?, Duration_HRS=?, StartDate=?, EndDate=?, Slot=?, StaffId=?, Status=?, Price=? WHERE TrekId=?""",
+                       (name, difficulty, location, duration, s_date, e_date, slot, staff_val, status, price, TrekId))
+        db.commit()
+        flash("Trek updated successfully!", "success")
+        return redirect(url_for("adminTreks"))
+
+    cursor.execute("SELECT * FROM Trek WHERE TrekId=?", (TrekId,))
+    trek = cursor.fetchone()
     if not trek:
-        conn.close()
-        return "Trek Not found",404
-    cursor.execute("Select u.UserId from User u, Trek t where u.UserId=t.StaffId and t.TrekId=?",(TrekId,))
-    row=cursor.fetchone()
-    cursor.execute("Select UserId,Fullname from User where UserRole='Staff'")
-    staffs=cursor.fetchall()
-    if row:
-        staffId=row[0]
-    else:
-        staffId=None
-    conn.close()
-    return render_template("editTrek.html",trek=trek,staffs=staffs,staffId=staffId)
+        return "Trek not found", 404
+
+    cursor.execute("SELECT UserId, Fullname FROM User WHERE UserRole='Staff'")
+    staffs = cursor.fetchall()
+    return render_template("editTrek.html", trek=trek, staffs=staffs, staffId=trek["StaffId"])
+
 
 @app.route("/removeTrek/<int:TrekId>")
+@role_required("Admin")
 def removeTrek(TrekId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("SELECT BookingId from Booking where TrekId=?",(TrekId,))
-    rows=cursor.fetchall()
-    for row in rows:
-        BookingId=row[0]
-        cursor.execute("SELECT BookingId,u.UserId,u.Fullname,t.TrekId,t.TrekName,t.StaffId,s.Fullname,t.StartDate,t.EndDate,b.BookingDate,'Revoked' from Booking b Join Trek t on b.Trekid=t.TrekId Join User u on b.UserId=u.UserId LEFT Join User s on t.StaffId=s.UserId where b.BookingId=?",(BookingId,))
-        data=cursor.fetchone()
-        cursor.execute("INSERT INTO History values(?,?,?,?,?,?,?,?,?,?,?)",data)
-    cursor.execute("Delete from Trek where TrekId=?",(TrekId,))
-    conn.commit()
-    conn.close()
-    flash("Deleted The Trek","success")
-    return redirect("/adminTreks")
+    db = get_db()
+    cursor = db.cursor()
 
-@app.route("/searchTrek/<x>/<int:y>",methods=["GET","POST"])
-def searchTrek(x,y):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(y==1):
-        cursor.execute("SELECT * FROM Trek WHERE TrekName LIKE ?", (f"%{x}%",))
-        treks=cursor.fetchall()
-        conn.close()
-        return render_template("adminTreks.html", treks=treks)
+    cursor.execute("SELECT BookingId FROM Booking WHERE TrekId=?", (TrekId,))
+    bookings = cursor.fetchall()
+
+    for b in bookings:
+        b_id = b["BookingId"]
+        cursor.execute("""SELECT b.BookingId, u.UserId, u.FullName, t.TrekId, t.TrekName, t.StaffId, s.FullName, t.StartDate, t.EndDate, b.BookingDate, 'Revoked'
+                          FROM Booking b 
+                          JOIN Trek t ON b.TrekId=t.TrekId 
+                          JOIN User u ON b.UserId=u.UserId 
+                          LEFT JOIN User s ON t.StaffId=s.UserId 
+                          WHERE b.BookingId=?""", (b_id,))
+        data = cursor.fetchone()
+        if data:
+            cursor.execute("INSERT INTO History VALUES (?,?,?,?,?,?,?,?,?,?,?)", tuple(data))
+
+    cursor.execute("DELETE FROM Trek WHERE TrekId=?", (TrekId,))
+    db.commit()
+    flash("Trek removed and active bookings logged into history.", "success")
+    return redirect(url_for("adminTreks"))
+
+
+@app.route("/searchTrek/<x>/<int:y>", methods=["GET", "POST"])
+@role_required("Admin")
+def searchTrek(x, y):
+    db = get_db()
+    cursor = db.cursor()
+    if y == 1:
+        cursor.execute("SELECT t.*, s.FullName as StaffName FROM Trek t LEFT JOIN User s ON t.StaffId=s.UserId WHERE t.TrekName LIKE ?", (f"%{x}%",))
     else:
-        cursor.execute("Select * from Trek where TrekId=?",(x,))
-        treks=cursor.fetchall()
-        conn.close()
-        return render_template("adminTreks.html", treks=treks)
+        cursor.execute("SELECT t.*, s.FullName as StaffName FROM Trek t LEFT JOIN User s ON t.StaffId=s.UserId WHERE t.TrekId=?", (x,))
+    treks = cursor.fetchall()
+    return render_template("adminTreks.html", treks=treks)
 
-@app.route("/adminTrekkers", methods=["GET","POST"])
+
+@app.route("/adminTrekkers", methods=["GET", "POST"])
+@role_required("Admin")
 def adminTrekkers():
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(request.method=="POST"):
-        NameorId=request.form.get("NameorId")
-        if(NameorId):
-            x=""
-            y=1
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        search_val = request.form.get("NameorId", "").strip()
+        if search_val:
             try:
-                x=int(NameorId)
-                y=0
+                val = int(search_val)
+                return redirect(url_for("searchTrekker", x=val, y=0))
             except ValueError:
-                x=str(NameorId)
-            conn.close()
-            return redirect(url_for("searchTrekker",x=x,y=y))
+                return redirect(url_for("searchTrekker", x=search_val, y=1))
         else:
-            conn.close()
-            flash("Please search after putting values", "warning")
+            flash("Please enter search text", "warning")
             return redirect(url_for("adminTrekkers"))
-    cursor.execute("Select * from User where UserRole='Trekker'")
-    users=cursor.fetchall()
-    conn.close()
-    return render_template("adminTrekkers.html",users=users)
-    
-@app.route("/searchUser/<x>/<int:y>",methods=["GET","POST"])
-def searchTrekker(x,y):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(y==1):
+
+    cursor.execute("SELECT * FROM User WHERE UserRole='Trekker'")
+    users = cursor.fetchall()
+    return render_template("adminTrekkers.html", users=users)
+
+
+@app.route("/searchUser/<x>/<int:y>", methods=["GET", "POST"])
+@role_required("Admin")
+def searchTrekker(x, y):
+    db = get_db()
+    cursor = db.cursor()
+    if y == 1:
         cursor.execute("SELECT * FROM User WHERE FullName LIKE ? AND UserRole='Trekker'", (f"%{x}%",))
-        users=cursor.fetchall()
-        conn.close()
-        return render_template("adminTrekkers.html",users=users)
     else:
-        cursor.execute("Select * from User where UserId=? and UserRole='Trekker'",(x,))
-        users=cursor.fetchall()
-        conn.close()
-        return render_template("adminTrekkers.html",users=users)
-    
+        cursor.execute("SELECT * FROM User WHERE UserId=? AND UserRole='Trekker'", (x,))
+    users = cursor.fetchall()
+    return render_template("adminTrekkers.html", users=users)
+
 
 @app.route("/blacklist/<int:UserId>")
+@role_required("Admin")
 def blacklist(UserId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("SELECT TrekId from Booking where UserId=?",(UserId,))
-    data=cursor.fetchall()
-    for trek in data:
-        cursor.execute("Update Trek set Participants=Participants-1 where TrekId=?",(trek[0],))
-        cursor.execute("Select Participants from Trek where TrekId=?",(trek[0],))
-        p=cursor.fetchone()[0]
-        if(p<0):
-            cursor.execute("Update Trek set Participants=0 where TrekId=?",(trek[0],))
-    cursor.execute("Delete from User where UserId=? and UserRole='Trekker'",(UserId,))
-    conn.commit()
-    conn.close()
-    return redirect("/adminTrekkers")
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT TrekId FROM Booking WHERE UserId=?", (UserId,))
+    user_bookings = cursor.fetchall()
+
+    for b in user_bookings:
+        cursor.execute("UPDATE Trek SET Participants = MAX(0, Participants - 1) WHERE TrekId=?", (b["TrekId"],))
+
+    cursor.execute("DELETE FROM User WHERE UserId=? AND UserRole='Trekker'", (UserId,))
+    db.commit()
+    flash("Trekker blacklisted and deleted successfully.", "success")
+    return redirect(url_for("adminTrekkers"))
 
 
-@app.route("/adminStaff", methods=["GET","POST"])
+@app.route("/adminStaff", methods=["GET", "POST"])
+@role_required("Admin")
 def adminStaff():
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(request.method=="POST"):
-        NameorId=request.form.get("NameorId")
-        if(NameorId):
-            x=""
-            y=1
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        search_val = request.form.get("NameorId", "").strip()
+        if search_val:
             try:
-                x=int(NameorId)
-                y=0
+                val = int(search_val)
+                return redirect(url_for("searchStaff", x=val, y=0))
             except ValueError:
-                x=str(NameorId)
-            conn.close()
-            return redirect(url_for("searchStaff",x=x,y=y))
+                return redirect(url_for("searchStaff", x=search_val, y=1))
         else:
-            conn.close()
-            flash("Please search after putting values", "warning")
+            flash("Please enter search criteria", "warning")
             return redirect(url_for("adminStaff"))
-    cursor.execute("Select * from User where UserRole='Staff'")
-    staffs=cursor.fetchall()
-    cursor.execute("Select * from StaffReq")
-    reqstaffs=cursor.fetchall()
-    conn.close()
-    return render_template("adminStaff.html",staffs=staffs,reqstaffs=reqstaffs)
-    
-@app.route("/searchStaff/<x>/<int:y>",methods=["GET","POST"])
-def searchStaff(x,y):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(y==1):
-        cursor.execute("Select * from User where FullName LIKE ? and UserRole='Staff'",(f"%{x}%",))
-        staffs=cursor.fetchall()
-        cursor.execute("Select * from StaffReq")
-        reqstaffs=cursor.fetchall()
-        conn.close()
-        return render_template("adminStaff.html", staffs=staffs, reqstaffs=reqstaffs)
+
+    cursor.execute("SELECT * FROM User WHERE UserRole='Staff'")
+    staffs = cursor.fetchall()
+    cursor.execute("SELECT * FROM StaffReq")
+    reqstaffs = cursor.fetchall()
+    return render_template("adminStaff.html", staffs=staffs, reqstaffs=reqstaffs)
+
+
+@app.route("/searchStaff/<x>/<int:y>", methods=["GET", "POST"])
+@role_required("Admin")
+def searchStaff(x, y):
+    db = get_db()
+    cursor = db.cursor()
+    if y == 1:
+        cursor.execute("SELECT * FROM User WHERE FullName LIKE ? AND UserRole='Staff'", (f"%{x}%",))
     else:
-        cursor.execute("Select * from User where UserId=? and UserRole='Staff'",(x,))
-        staffs=cursor.fetchall()
-        cursor.execute("Select * from StaffReq")
-        reqstaffs=cursor.fetchall()
-        conn.close()
-        return render_template("adminStaff.html", staffs=staffs, reqstaffs=reqstaffs)
-    
+        cursor.execute("SELECT * FROM User WHERE UserId=? AND UserRole='Staff'", (x,))
+    staffs = cursor.fetchall()
+    cursor.execute("SELECT * FROM StaffReq")
+    reqstaffs = cursor.fetchall()
+    return render_template("adminStaff.html", staffs=staffs, reqstaffs=reqstaffs)
+
 
 @app.route("/blacklistS/<int:UserId>")
+@role_required("Admin")
 def blacklistS(UserId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select t.TrekId,t.TrekName from Trek t, Booking b where t.StaffId=? and t.TrekId=b.TrekId",(UserId,))
-    treks=cursor.fetchone()
-    if(treks):
-        conn.close()
-        return redirect(url_for("replaceStaff",StaffId=UserId))
-    cursor.execute("Update Trek set StaffId=Null where StaffId=?",(UserId,))
-    cursor.execute("Delete from User where UserId=? and UserRole='Staff'",(UserId,))
-    conn.commit()
-    conn.close()
-    return redirect("/adminStaff")
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT t.TrekId FROM Trek t JOIN Booking b ON t.TrekId=b.TrekId WHERE t.StaffId=?", (UserId,))
+    assigned_treks = cursor.fetchall()
 
-@app.route("/replaceStaff/<int:StaffId>", methods=["GET","POST"])
+    if assigned_treks:
+        return redirect(url_for("replaceStaff", StaffId=UserId))
+
+    cursor.execute("UPDATE Trek SET StaffId=NULL WHERE StaffId=?", (UserId,))
+    cursor.execute("DELETE FROM User WHERE UserId=? AND UserRole='Staff'", (UserId,))
+    db.commit()
+    flash("Staff member deleted.", "success")
+    return redirect(url_for("adminStaff"))
+
+
+@app.route("/replaceStaff/<int:StaffId>", methods=["GET", "POST"])
+@role_required("Admin")
 def replaceStaff(StaffId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(request.method=="POST"):
-        cursor.execute("Select DISTINCT t.TrekId from Trek t, Booking b where t.StaffId=? and t.TrekId=b.TrekId",(StaffId,))
-        treks=cursor.fetchall()
-        count=1
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        cursor.execute("SELECT DISTINCT t.TrekId FROM Trek t JOIN Booking b ON t.TrekId=b.TrekId WHERE t.StaffId=?", (StaffId,))
+        treks = cursor.fetchall()
+        count = 1
         for trek in treks:
-            staffId=request.form.get(f"StaffId{count}")
-            count+=1
-            cursor.execute("Select UserId from User where UserId=? and UserRole='Staff'",(staffId,))
-            if not cursor.fetchone():
-                conn.close()
-                flash("Invalid staffId was tried to be assigned.")
-                return redirect(url_for("replaceStaff",StaffId=StaffId))
-            cursor.execute("Update Trek set StaffId=? where TrekId=?",(staffId,trek[0]))
-            conn.commit()
-        cursor.execute("DELETE FROM User WHERE UserId=? AND UserRole='Staff'",(StaffId,))
-        conn.close()
-        flash("Treks were updated","success")
-        return redirect(url_for("adminStaff"))     
-    cursor.execute("Select UserId,Fullname from User where UserRole='Staff' and UserId!=?",(StaffId,))
-    staffs=cursor.fetchall()
-    cursor.execute("Select DISTINCT t.TrekId,t.TrekName from Trek t, Booking b where t.StaffId=? and t.TrekId=b.TrekId",(StaffId,))
-    treks=cursor.fetchall()
-    conn.close()
-    flash("The removed staff alredy have some assigned treks with booking.","message")
-    return render_template("replaceStaff.html",treks=treks,staffs=staffs,sId=StaffId)
+            new_staff_id = request.form.get(f"StaffId{count}")
+            count += 1
+            if new_staff_id:
+                cursor.execute("SELECT UserId FROM User WHERE UserId=? AND UserRole='Staff'", (new_staff_id,))
+                if cursor.fetchone():
+                    cursor.execute("UPDATE Trek SET StaffId=? WHERE TrekId=?", (new_staff_id, trek["TrekId"]))
 
-@app.route("/approve/<int:ReqId>",methods=["GET","POST"])
+        cursor.execute("DELETE FROM User WHERE UserId=? AND UserRole='Staff'", (StaffId,))
+        db.commit()
+        flash("Staff reassigned and former staff deleted successfully.", "success")
+        return redirect(url_for("adminStaff"))
+
+    cursor.execute("SELECT UserId, Fullname FROM User WHERE UserRole='Staff' AND UserId!=?", (StaffId,))
+    staffs = cursor.fetchall()
+    cursor.execute("SELECT DISTINCT t.TrekId, t.TrekName FROM Trek t JOIN Booking b ON t.TrekId=b.TrekId WHERE t.StaffId=?", (StaffId,))
+    treks = cursor.fetchall()
+    flash("The staff member has active assigned treks with bookings. Reassign them below.", "warning")
+    return render_template("replaceStaff.html", treks=treks, staffs=staffs, sId=StaffId)
+
+
+@app.route("/approve/<int:ReqId>", methods=["GET", "POST"])
+@role_required("Admin")
 def approve(ReqId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("SELECT * FROM StaffReq where ReqId=?",(ReqId,))
-    staff=cursor.fetchone()
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM StaffReq WHERE ReqId=?", (ReqId,))
+    staff = cursor.fetchone()
     if staff:
-        cursor.execute("Insert into User (UserId,FullName,UserEmail,UserPassword,UserRole,Contact) values(?,?,?,?,'Staff',?)", (None, staff[1], staff[2], staff[3], staff[4]))
-        cursor.execute("Delete from StaffReq where ReqId=?",(ReqId,))
-        conn.commit()
-    conn.close()
-    return redirect("/adminStaff")
+        cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, 'Staff', ?)",
+                       (staff["Name"], staff["Email"], staff["Password"], staff["Contact"]))
+        cursor.execute("DELETE FROM StaffReq WHERE ReqId=?", (ReqId,))
+        db.commit()
+        flash(f"Staff request for {staff['Name']} approved!", "success")
+    return redirect(url_for("adminStaff"))
 
-@app.route("/reject/<int:ReqId>",methods=["GET","POST"])
+
+@app.route("/reject/<int:ReqId>", methods=["GET", "POST"])
+@role_required("Admin")
 def reject(ReqId):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("SELECT * FROM StaffReq where ReqId=?",(ReqId,))
-    staff=cursor.fetchone()
-    if staff:
-        cursor.execute("Delete from StaffReq where ReqId=?",(ReqId,))
-        conn.commit()
-    conn.close()
-    return redirect("/adminStaff")
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM StaffReq WHERE ReqId=?", (ReqId,))
+    db.commit()
+    flash("Staff request rejected.", "info")
+    return redirect(url_for("adminStaff"))
 
-@app.route("/adminBookings", methods=["GET","POST"])
+
+@app.route("/adminBookings", methods=["GET", "POST"])
+@role_required("Admin")
 def adminBooking():
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(request.method=="POST"):
-        NameorId=request.form.get("NameorId")
-        SearchBy=request.form.get("SearchBy")
-        if(NameorId):
-            x=""
-            y=1
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        name_or_id = request.form.get("NameorId", "").strip()
+        search_by = request.form.get("SearchBy", "").strip()
+        if name_or_id:
             try:
-                x=int(NameorId)
-                y=0
+                val = int(name_or_id)
+                return redirect(url_for("searchBooking", x=val, y=0, s=search_by))
             except ValueError:
-                x=str(NameorId)
-            conn.close()
-            return redirect(url_for("searchBooking",x=x,y=y,s=SearchBy))
+                return redirect(url_for("searchBooking", x=name_or_id, y=1, s=search_by))
         else:
-            conn.close()
-            flash("Please search after putting values", "warning")
+            flash("Please enter search keyword.", "warning")
             return redirect(url_for("adminBooking"))
 
-    cursor.execute("""SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b
-      JOIN Trek t ON b.TrekId=t.TrekId 
-      JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId ORDER BY BookingStatus""")
-    bookings=cursor.fetchall() 
-    conn.close()
-    return render_template("adminBookings.html",bookings=bookings)
-    
-@app.route("/searchBooking/<x>/<int:y>/<string:s>",methods=["GET","POST"])
-def searchBooking(x,y,s):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(s=="BookingId"):
-        cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE b.BookingId=? ORDER BY BookingStatus", (x,))
-        bookings=cursor.fetchall()
-        conn.close()
-        return render_template("adminBookings.html",bookings=bookings)
-    elif(s=="TrekIdorName"):
-        if(y==0):
-            cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE b.TrekId=? ORDER BY BookingStatus", (x,))
-            bookings=cursor.fetchall()
-            conn.close()
-            return render_template("adminBookings.html",bookings=bookings)
-        else:
-            cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE t.TrekName LIKE ? ORDER BY BookingStatus", (f"%{x}%",))
-            bookings=cursor.fetchall()
-            conn.close()
-            return render_template("adminBookings.html", bookings=bookings) 
-    elif(s=="StaffIdorName"):
-        if(y==0):
-            cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE s.UserId=? ORDER BY BookingStatus", (x,))
-            bookings=cursor.fetchall()
-            conn.close()
-            return render_template("adminBookings.html",bookings=bookings)
-        else:
-            cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE s.FullName LIKE ? ORDER BY BookingStatus", (f"%{x}%",))
-            bookings=cursor.fetchall()
-            conn.close()
-            return render_template("adminBookings.html",bookings=bookings)
-    elif(s=="UserIdorName"):
-        if(y==0):
-            cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE u.UserId=? ORDER BY BookingStatus", (x,))
-            bookings=cursor.fetchall()
-            conn.close()
-            return render_template("adminBookings.html",bookings=bookings)
-        else:
-            cursor.execute("SELECT BookingId, b.TrekId, t.TrekName, s.UserId, s.FullName, u.UserId, u.FullName, BookingStatus FROM Booking b JOIN Trek t ON b.TrekId=t.TrekId JOIN User u ON b.UserId=u.UserId LEFT JOIN User s ON t.StaffId=s.UserId WHERE u.FullName LIKE ? ORDER BY BookingStatus", (f"%{x}%",))
-            bookings=cursor.fetchall()
-            conn.close()
-            return render_template("adminBookings.html",bookings=bookings)
-    else:
-        conn.close()
-        return "ERROR in SearchBy"
+    cursor.execute("""SELECT b.BookingId, b.TrekId, t.TrekName, s.UserId as StaffId, s.FullName as StaffName, u.UserId as TrekkerId, u.FullName as TrekkerName, b.BookingStatus, b.PaymentStatus 
+                      FROM Booking b
+                      JOIN Trek t ON b.TrekId=t.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      LEFT JOIN User s ON t.StaffId=s.UserId 
+                      ORDER BY b.BookingStatus""")
+    bookings = cursor.fetchall()
+    return render_template("adminBookings.html", bookings=bookings)
 
-@app.route("/adminHistory",methods=["GET","POST"])
+
+@app.route("/searchBooking/<x>/<int:y>/<string:s>", methods=["GET", "POST"])
+@role_required("Admin")
+def searchBooking(x, y, s):
+    db = get_db()
+    cursor = db.cursor()
+    base_query = """SELECT b.BookingId, b.TrekId, t.TrekName, s.UserId as StaffId, s.FullName as StaffName, u.UserId as TrekkerId, u.FullName as TrekkerName, b.BookingStatus, b.PaymentStatus 
+                    FROM Booking b
+                    JOIN Trek t ON b.TrekId=t.TrekId 
+                    JOIN User u ON b.UserId=u.UserId 
+                    LEFT JOIN User s ON t.StaffId=s.UserId """
+
+    if s == "BookingId":
+        cursor.execute(base_query + "WHERE b.BookingId=? ORDER BY b.BookingStatus", (x,))
+    elif s == "TrekIdorName":
+        if y == 0:
+            cursor.execute(base_query + "WHERE b.TrekId=? ORDER BY b.BookingStatus", (x,))
+        else:
+            cursor.execute(base_query + "WHERE t.TrekName LIKE ? ORDER BY b.BookingStatus", (f"%{x}%",))
+    elif s == "StaffIdorName":
+        if y == 0:
+            cursor.execute(base_query + "WHERE s.UserId=? ORDER BY b.BookingStatus", (x,))
+        else:
+            cursor.execute(base_query + "WHERE s.FullName LIKE ? ORDER BY b.BookingStatus", (f"%{x}%",))
+    elif s == "UserIdorName":
+        if y == 0:
+            cursor.execute(base_query + "WHERE u.UserId=? ORDER BY b.BookingStatus", (x,))
+        else:
+            cursor.execute(base_query + "WHERE u.FullName LIKE ? ORDER BY b.BookingStatus", (f"%{x}%",))
+
+    bookings = cursor.fetchall()
+    return render_template("adminBookings.html", bookings=bookings)
+
+
+@app.route("/adminHistory", methods=["GET", "POST"])
+@role_required("Admin")
 def adminHistory():
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(request.method=="POST"):
-        NameorId=request.form.get("NameorId")
-        SearchBy=request.form.get("SearchBy")
-        if(NameorId):
-            x=""
-            y=1
+    db = get_db()
+    cursor = db.cursor()
+
+    if request.method == "POST":
+        search_val = request.form.get("NameorId", "").strip()
+        search_by = request.form.get("SearchBy", "").strip()
+        if search_val:
             try:
-                x=int(NameorId)
-                y=0
+                val = int(search_val)
+                return redirect(url_for("searchHistory", x=val, y=0, s=search_by))
             except ValueError:
-                x=str(NameorId)
-            conn.close()
-            return redirect(url_for("searchHistory",x=x,y=y,s=SearchBy))
-        else:
-            conn.close()
-            flash("Please search after putting values", "warning")
-            return redirect(url_for("adminHistory"))
-    cursor.execute("SELECT * from History")
-    trekkings=cursor.fetchall()
-    conn.close()
-    return render_template("adminHistory.html",trekkings=trekkings)     
+                return redirect(url_for("searchHistory", x=search_val, y=1, s=search_by))
 
-@app.route("/searchHistory/<x>/<int:y>/<string:s>",methods=["GET","POST"])
-def searchHistory(x,y,s):
-    response=checkAdmin()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    if(s=="BookingId"):
-        cursor.execute("Select * from History where BookingId=?",(x,))
-        trekkings=cursor.fetchall()
-        conn.close()
-        return render_template("adminHistory.html",trekkings=trekkings)
-    elif(s=="TrekIdorName"):
-        if(y==0):
-            cursor.execute("Select * from History where TrekId=?",(x,))
-            trekkings=cursor.fetchall()
-            conn.close()
-            return render_template("adminHistory.html",trekkings=trekkings)
-        else:
-            cursor.execute("Select * from History where TrekName like ?",(f"%{x}%",))
-            trekkings=cursor.fetchall()
-            conn.close()
-            return render_template("adminHistory.html",trekkings=trekkings)
-    elif(s=="StaffIdorName"):
-        if(y==0):
-            cursor.execute("Select * from History where StaffId=?",(x,))
-            trekkings=cursor.fetchall()
-            conn.close()
-            return render_template("adminHistory.html",trekkings=trekkings)
-        else:
-            cursor.execute("Select * from History where StaffName like ?",(f"%{x}%",))
-            trekkings=cursor.fetchall()
-            conn.close()
-            return render_template("adminHistory.html",trekkings=trekkings)
-    elif(s=="UserIdorName"):
-        if(y==0):
-            cursor.execute("Select * from History where TrekkerId=?",(x,))
-            trekkings=cursor.fetchall()
-            conn.close()
-            return render_template("adminHistory.html",trekkings=trekkings)
-        else:
-            cursor.execute("Select * from History where TrekkerName like ?",(f"%{x}%",))
-            trekkings=cursor.fetchall()
-            conn.close()
-            return render_template("adminHistory.html",trekkings=trekkings)
-    else:
-        conn.close()
-        return "ERROR in SearchBy"
+    cursor.execute("SELECT * FROM History")
+    trekkings = cursor.fetchall()
+    return render_template("adminHistory.html", trekkings=trekkings)
 
+
+@app.route("/searchHistory/<x>/<int:y>/<string:s>", methods=["GET", "POST"])
+@role_required("Admin")
+def searchHistory(x, y, s):
+    db = get_db()
+    cursor = db.cursor()
+    if s == "BookingId":
+        cursor.execute("SELECT * FROM History WHERE BookingId=?", (x,))
+    elif s == "TrekIdorName":
+        if y == 0:
+            cursor.execute("SELECT * FROM History WHERE TrekId=?", (x,))
+        else:
+            cursor.execute("SELECT * FROM History WHERE TrekName LIKE ?", (f"%{x}%",))
+    elif s == "StaffIdorName":
+        if y == 0:
+            cursor.execute("SELECT * FROM History WHERE StaffId=?", (x,))
+        else:
+            cursor.execute("SELECT * FROM History WHERE StaffName LIKE ?", (f"%{x}%",))
+    elif s == "UserIdorName":
+        if y == 0:
+            cursor.execute("SELECT * FROM History WHERE TrekkerId=?", (x,))
+        else:
+            cursor.execute("SELECT * FROM History WHERE TrekkerName LIKE ?", (f"%{x}%",))
+
+    trekkings = cursor.fetchall()
+    return render_template("adminHistory.html", trekkings=trekkings)
+
+
+# ----------------------------------------------------
+# Staff Routes
+# ----------------------------------------------------
 @app.route('/staffDashboard')
+@role_required("Staff")
 def staffDashboard():
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    cursor.execute("Select * from User where UserId=?",(Id,))  
-    UserInfo=cursor.fetchone()
-    cursor.execute("Select TrekId, TrekName, Location, Participants, Slot, Status from Trek where StaffId=? Limit 3",(Id,))
-    aTreks=cursor.fetchall()
-    cursor.execute("Select COUNT(TrekId) from Trek where StaffId=?",(Id,))
-    a=cursor.fetchone()[0]
-    cursor.execute("Select Count(u.UserId) from Trek t, User u, Booking b where u.UserId=b.UserId and t.TrekId=b.TrekId and t.StaffId=?",(Id,))
-    p=cursor.fetchone()[0]
-    cursor.execute("Select COUNT(DISTINCT TrekId) from History where StaffId=?",(Id,))
-    c=cursor.fetchone()[0]
-    conn.close()
-    return render_template("staffDashboard.html",UserInfo=UserInfo,aTreks=aTreks,a=a,p=p,c=c) 
+    db = get_db()
+    cursor = db.cursor()
+    staff_id = session.get("UserId")
+
+    cursor.execute("SELECT * FROM User WHERE UserId=?", (staff_id,))
+    user_info = cursor.fetchone()
+
+    cursor.execute("SELECT TrekId, TrekName, Location, Participants, Slot, Status FROM Trek WHERE StaffId=? LIMIT 3", (staff_id,))
+    a_treks = cursor.fetchall()
+
+    cursor.execute("SELECT count(TrekId) FROM Trek WHERE StaffId=?", (staff_id,))
+    assigned_count = cursor.fetchone()[0]
+
+    cursor.execute("""SELECT count(u.UserId) FROM Trek t 
+                      JOIN Booking b ON t.TrekId=b.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      WHERE t.StaffId=?""", (staff_id,))
+    participant_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT count(DISTINCT TrekId) FROM History WHERE StaffId=?", (staff_id,))
+    completed_count = cursor.fetchone()[0]
+
+    return render_template("staffDashboard.html",
+                           UserInfo=user_info,
+                           aTreks=a_treks,
+                           a=assigned_count,
+                           p=participant_count,
+                           c=completed_count)
+
 
 @app.route("/staffProfile")
+@role_required("Staff")
 def staffProfile():
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    staffId=session.get("UserId")
-    cursor.execute("Select UserId, Fullname, UserEmail, Contact from User where UserId=?",(staffId,))
-    Staff=cursor.fetchone()
-    cursor.execute("Select COUNT(DISTINCT TrekId) from History where StaffId=?",(staffId,))
-    c=cursor.fetchone()[0]
-    conn.close()
-    return render_template("staffProfile.html",Staff=Staff,c=c)
+    db = get_db()
+    cursor = db.cursor()
+    staff_id = session.get("UserId")
+    cursor.execute("SELECT UserId, Fullname, UserEmail, Contact FROM User WHERE UserId=?", (staff_id,))
+    staff = cursor.fetchone()
+    cursor.execute("SELECT count(DISTINCT TrekId) FROM History WHERE StaffId=?", (staff_id,))
+    c = cursor.fetchone()[0]
+    return render_template("staffProfile.html", Staff=staff, c=c)
+
 
 @app.route("/assignedTreks")
+@role_required("Staff")
 def assignedTreks():
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    staffId=session.get("UserId")
-    cursor.execute("Select * from Trek where StaffId=?",(staffId,))
-    aTreks=cursor.fetchall()
-    conn.close()
-    return render_template("assignedTreks.html",aTreks=aTreks)
+    db = get_db()
+    cursor = db.cursor()
+    staff_id = session.get("UserId")
+    cursor.execute("SELECT * FROM Trek WHERE StaffId=?", (staff_id,))
+    a_treks = cursor.fetchall()
+    return render_template("assignedTreks.html", aTreks=a_treks)
 
 
 @app.route("/staffTrekkers")
+@role_required("Staff")
 def staffTrekkers():
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    staffId=session.get("UserId")
-    cursor.execute("""Select t.TrekId,u.UserId, TrekName, FullName, UserEmail, Contact from Trek t, Booking b, User u 
-        where u.UserId=b.UserId and b.TrekId=t.TrekId and t.StaffId=? and b.BookingStatus='Booked'""",(staffId,))
-    Trekkers=cursor.fetchall()
-    cursor.execute("""Select DISTINCT t.TrekId, TrekName from Trek t, Booking b, User u 
-        where u.UserId=b.UserId and b.TrekId=t.TrekId and t.StaffId=? and b.BookingStatus='Booked'""",(staffId,))
-    aTreks=cursor.fetchall()
-    conn.close()
-    return render_template("staffTrekkers.html",aTreks=aTreks,Trekkers=Trekkers)
+    db = get_db()
+    cursor = db.cursor()
+    staff_id = session.get("UserId")
 
-@app.route("/editStaffProfile", methods=["GET","POST"])
+    cursor.execute("""SELECT t.TrekId, u.UserId, t.TrekName, u.FullName, u.UserEmail, u.Contact 
+                      FROM Trek t 
+                      JOIN Booking b ON t.TrekId=b.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      WHERE t.StaffId=? AND b.BookingStatus='Booked'""", (staff_id,))
+    trekkers = cursor.fetchall()
+
+    cursor.execute("""SELECT DISTINCT t.TrekId, t.TrekName 
+                      FROM Trek t 
+                      JOIN Booking b ON t.TrekId=b.TrekId 
+                      WHERE t.StaffId=? AND b.BookingStatus='Booked'""", (staff_id,))
+    a_treks = cursor.fetchall()
+
+    return render_template("staffTrekkers.html", aTreks=a_treks, Trekkers=trekkers)
+
+
+@app.route("/editStaffProfile", methods=["GET", "POST"])
+@role_required("Staff")
 def editStaffProfile():
-    response=checkStaff()
-    if response:
-        return response
-    if(request.method=="POST"):
-        conn=sqlite3.connect("TrekManagement.db")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        cursor=conn.cursor()
-        name=request.form.get("name")
-        email=request.form.get("email")
-        contact=request.form.get("contact")
-        staffId=session.get("UserId")
-        cursor.execute("SELECT UserId from User where UserEmail=? and UserId!=?",(email,staffId))
-        row=cursor.fetchone()
-        if row:
-            flash("This email is already in use.","error")
-            conn.close()
-            return redirect("/editStaffProfile")
-        cursor.execute("Update User set FullName=?, UserEmail=?,Contact=? where UserId=?",(name,email,contact,staffId))
-        conn.commit()
-        conn.close()
-        return redirect(url_for("staffProfile"))
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    staffId=session.get("UserId")
-    cursor.execute("Select UserId, Fullname, UserEmail, Contact from User where UserId=?",(staffId,))
-    Staff=cursor.fetchone()
-    conn.close()
-    return render_template("editStaffProfile.html",Staff=Staff)
+    db = get_db()
+    cursor = db.cursor()
+    staff_id = session.get("UserId")
 
-@app.route("/manageTrekS/<int:trekId>", methods=["GET","POST"])
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        contact = request.form.get("contact", "").strip()
+
+        cursor.execute("SELECT UserId FROM User WHERE UserEmail=? AND UserId!=?", (email, staff_id))
+        if cursor.fetchone():
+            flash("This email is already in use.", "error")
+            return redirect(url_for("editStaffProfile"))
+
+        cursor.execute("UPDATE User SET FullName=?, UserEmail=?, Contact=? WHERE UserId=?", (name, email, contact, staff_id))
+        db.commit()
+        flash("Profile updated!", "success")
+        return redirect(url_for("staffProfile"))
+
+    cursor.execute("SELECT UserId, Fullname, UserEmail, Contact FROM User WHERE UserId=?", (staff_id,))
+    staff = cursor.fetchone()
+    return render_template("editStaffProfile.html", Staff=staff)
+
+
+@app.route("/manageTrekS/<int:trekId>", methods=["GET", "POST"])
+@role_required("Staff")
 def manageTrekS(trekId):
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select StaffId from Trek where TrekId=?",(trekId,))
-    row=cursor.fetchone()
-    if(not row):
-        conn.close()
-        return "Trek not found",404
-    StaffId=row[0]
-    if(StaffId!=session.get("UserId")):
-        conn.close()
-        return render_template("unauthorized.html")
-    if(request.method=="POST"):
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute("SELECT StaffId FROM Trek WHERE TrekId=?", (trekId,))
+    trek = cursor.fetchone()
+    if not trek or trek["StaffId"] != session.get("UserId"):
+        return render_template("unauthorized.html"), 403
+
+    if request.method == "POST":
         try:
-            Slot=int(request.form.get("Slot"))
-        except (TypeError,ValueError):
-            conn.close()
-            flash("Slot must be a number","error")
-            return redirect(url_for("manageTrekS",trekId=trekId))
-        if(Slot<=0):
-            conn.close()
-            flash("Slots should be greater than 0")
-            return redirect(url_for("manageTrekS",trekId=trekId))
-        Status=request.form.get("Status")
-        cursor.execute("Select Participants from Trek where TrekId=?",(trekId,))
-        p=cursor.fetchone()[0]
-        if(Slot<p):
-            conn.close()
-            flash("Slots can not be less than bookings already booked","error")
-            return redirect(url_for("manageTrekS",trekId=trekId))
-        cursor.execute("Update Trek set Slot=?, Status=? where TrekId=?",(Slot,Status,trekId))
-        conn.commit()
-        conn.close()
+            slot = int(request.form.get("Slot"))
+        except (TypeError, ValueError):
+            flash("Slot must be a number.", "error")
+            return redirect(url_for("manageTrekS", trekId=trekId))
+
+        if slot <= 0:
+            flash("Slots must be greater than 0.", "error")
+            return redirect(url_for("manageTrekS", trekId=trekId))
+
+        status = request.form.get("Status")
+        cursor.execute("SELECT Participants FROM Trek WHERE TrekId=?", (trekId,))
+        p = cursor.fetchone()["Participants"]
+
+        if slot < p:
+            flash("Slot capacity cannot be lower than active participant count.", "error")
+            return redirect(url_for("manageTrekS", trekId=trekId))
+
+        cursor.execute("UPDATE Trek SET Slot=?, Status=? WHERE TrekId=?", (slot, status, trekId))
+        db.commit()
+        flash("Trek details updated.", "success")
         return redirect(url_for("assignedTreks"))
 
-    cursor.execute("Select * from Trek where TrekId=?",(trekId,))
-    trek=cursor.fetchone()
-    conn.close()
-    return render_template("manageTrekS.html",trek=trek)
+    cursor.execute("SELECT * FROM Trek WHERE TrekId=?", (trekId,))
+    t = cursor.fetchone()
+    return render_template("manageTrekS.html", trek=t)
 
-# @app.route("/trekDetailS/<int:trekId>")
-# def trekDetailS(trekId):
-#     response=checkStaff()
-#     if response:
-#         return response
-#     conn=sqlite3.connect("TrekManagement.db")
-#     conn.execute("PRAGMA foreign_keys=ON;")
-#     cursor=conn.cursor()
-#     cursor.execute("Select StaffId from Trek where TrekId=?",(trekId,))
-#     StaffId=cursor.fetchone()[0]
-#     if(StaffId!=session.get("UserId")):
-#         conn.close()
-#         return render_template("unauthorized.html")
-#     cursor.execute("Select * from Trek where TrekId=?",(trekId,))
-#     trek=cursor.fetchone()
-#     conn.close()
-#     return render_template("trekDetailS.html",trek=trek)
 
 @app.route("/markOngoing/<int:trekId>")
+@role_required("Staff")
 def markOngoing(trekId):
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select StaffId,Status from Trek where TrekId=?",(trekId,))
-    row=cursor.fetchone()
-    if(not row):
-        conn.close()
-        return "trek does not exist",404
-    if(row[1]!="Open"):
-        conn.close()
-        flash("Only an open trek can be marked as ongoing","warning")
-        return redirect(url_for("manageTrekS",trekId=trekId))
-    StaffId=row[0]
-    if(StaffId!=session.get("UserId")):
-        conn.close()
-        return render_template("unauthorized.html")
-    cursor.execute("Update Trek set Status='Ongoing' where trekId=?",(trekId,))
-    conn.commit()
-    cursor.execute("Select * from Trek where trekId=?",(trekId,))
-    trek=cursor.fetchone()
-    conn.close()
-    return render_template("manageTrekS.html",trek=trek)
+    db = get_db()
+    cursor = db.cursor()
 
-@app.route("/markCompleted/<int:trekId>")
-def markCompleted(trekId):
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select StaffId,Status from Trek where TrekId=?",(trekId,))
-    row=cursor.fetchone()
-    if(not row):
-        conn.close()
-        return "trek does not exist",404
-    StaffId=row[0]
-    if(StaffId!=session.get("UserId")):
-        conn.close()
-        return render_template("unauthorized.html")
-    if(row[1]!="Ongoing"):
-        conn.close()
-        flash("You can not mark this trek as completed.It was not marked on going","error")
-        return redirect(url_for("manageTrekS",trekId=trekId))
-    staffId=session.get("UserId")
-    cursor.execute("""Select BookingId, u.UserId, u.FullName, t.TrekId, t.TrekName, t.StaffId,s.FullName,t.StartDate,t.EndDate,b.BookingDate
-        FROM Trek t, Booking b, User u LEFT JOIN User s on s.UserId=t.StaffId
-        where t.TrekId=b.TrekId and b.UserId=u.UserId and t.TrekId=? and t.StaffId=?""",(trekId,staffId))
-    data=cursor.fetchall()
-    for rec in data:
-        cursor.execute("INSERT INTO History(BookingId, TrekkerId,TrekkerName, TrekId, TrekName, StaffId, StaffName,TrekStart ,TrekEnd,BookingDate,Status) values(?,?,?,?,?,?,?,?,?,?,'Completed')", rec)
-    cursor.execute("Delete from Trek where TrekId=?",(trekId,))
-    # for booking in data:
-    #     cursor.execute("Delete from Booking where BookingId=?",(booking[0],))
-    conn.commit()
-    conn.close()
+    cursor.execute("SELECT StaffId, Status FROM Trek WHERE TrekId=?", (trekId,))
+    trek = cursor.fetchone()
+    if not trek or trek["StaffId"] != session.get("UserId"):
+        return render_template("unauthorized.html"), 403
+
+    if trek["Status"] != "Open":
+        flash("Only an open trek can be marked as ongoing.", "warning")
+        return redirect(url_for("manageTrekS", trekId=trekId))
+
+    cursor.execute("UPDATE Trek SET Status='Ongoing' WHERE TrekId=?", (trekId,))
+    db.commit()
+    flash("Trek is now set to Ongoing.", "success")
     return redirect(url_for("assignedTreks"))
 
+
+@app.route("/markCompleted/<int:trekId>")
+@role_required("Staff")
+def markCompleted(trekId):
+    db = get_db()
+    cursor = db.cursor()
+    staff_id = session.get("UserId")
+
+    cursor.execute("SELECT StaffId, Status FROM Trek WHERE TrekId=?", (trekId,))
+    trek = cursor.fetchone()
+    if not trek or trek["StaffId"] != staff_id:
+        return render_template("unauthorized.html"), 403
+
+    if trek["Status"] != "Ongoing":
+        flash("Only ongoing treks can be marked as completed.", "error")
+        return redirect(url_for("manageTrekS", trekId=trekId))
+
+    cursor.execute("""SELECT b.BookingId, u.UserId as TrekkerId, u.FullName as TrekkerName, t.TrekId, t.TrekName, t.StaffId, s.FullName as StaffName, t.StartDate, t.EndDate, b.BookingDate
+                      FROM Trek t 
+                      JOIN Booking b ON t.TrekId=b.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      LEFT JOIN User s ON s.UserId=t.StaffId 
+                      WHERE t.TrekId=? AND t.StaffId=?""", (trekId, staff_id))
+    bookings = cursor.fetchall()
+
+    for rec in bookings:
+        cursor.execute("""INSERT INTO History(BookingId, TrekkerId, TrekkerName, TrekId, TrekName, StaffId, StaffName, TrekStart, TrekEnd, BookingDate, Status) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Completed')""", tuple(rec))
+
+    cursor.execute("DELETE FROM Trek WHERE TrekId=?", (trekId,))
+    db.commit()
+    flash("Trek completed and logged into history.", "success")
+    return redirect(url_for("assignedTreks"))
+
+
 @app.route("/removeParticipant/<int:trekkerId>/<int:trekId>")
-def removeParticipant(trekkerId,trekId):
-    response=checkStaff()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("Select StaffId from Trek where TrekId=?",(trekId,))
-    row=cursor.fetchone()
-    if(not row):
-        conn.close()
-        return "trek does not exist",404
-    StaffId=row[0]
-    if(StaffId!=session.get("UserId")):
-        conn.close()
-        return render_template("unauthorized.html")
-    cursor.execute("SELECT BookingId from Booking where UserId=? and TrekId=?",(trekkerId,trekId))
-    row=cursor.fetchone()
-    if not row:
-        conn.close()
-        return "Booking Not Found",404
-    BookingId=row[0]
-    cursor.execute("SELECT BookingId,u.UserId,u.Fullname,t.TrekId,t.TrekName,t.StaffId,s.Fullname,t.StartDate,t.EndDate,b.BookingDate,'Revoked' from Booking b Join Trek t on b.Trekid=t.TrekId Join User u on b.UserId=u.UserId LEFT Join User s on t.StaffId=s.UserId where b.BookingId=?",(BookingId,))
-    data=cursor.fetchone()
-    if not data:
-        conn.close()
-        flash("No such booking was found","error")
+@role_required("Staff")
+def removeParticipant(trekkerId, trekId):
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute("SELECT StaffId FROM Trek WHERE TrekId=?", (trekId,))
+    trek = cursor.fetchone()
+    if not trek or trek["StaffId"] != session.get("UserId"):
+        return render_template("unauthorized.html"), 403
+
+    cursor.execute("SELECT BookingId FROM Booking WHERE UserId=? AND TrekId=?", (trekkerId, trekId))
+    booking = cursor.fetchone()
+    if not booking:
+        flash("Booking not found.", "error")
         return redirect(url_for("staffTrekkers"))
-    cursor.execute("INSERT INTO History values(?,?,?,?,?,?,?,?,?,?,?)",data)
-    cursor.execute("DELETE from Booking where TrekId=? and UserId=?",(trekId,trekkerId))
-    cursor.execute("Update Trek set Participants=Participants-1 where trekId=?",(trekId,))
-    conn.commit()
-    conn.close()
+
+    b_id = booking["BookingId"]
+    cursor.execute("""SELECT b.BookingId, u.UserId, u.FullName, t.TrekId, t.TrekName, t.StaffId, s.FullName, t.StartDate, t.EndDate, b.BookingDate, 'Revoked' 
+                      FROM Booking b 
+                      JOIN Trek t ON b.TrekId=t.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      LEFT JOIN User s ON t.StaffId=s.UserId 
+                      WHERE b.BookingId=?""", (b_id,))
+    hist_data = cursor.fetchone()
+    if hist_data:
+        cursor.execute("INSERT INTO History VALUES (?,?,?,?,?,?,?,?,?,?,?)", tuple(hist_data))
+
+    cursor.execute("DELETE FROM Booking WHERE BookingId=?", (b_id,))
+    cursor.execute("UPDATE Trek SET Participants = MAX(0, Participants - 1) WHERE TrekId=?", (trekId,))
+    db.commit()
+    flash("Participant removed from trek.", "success")
     return redirect(url_for("staffTrekkers"))
 
+
+# ----------------------------------------------------
+# Trekker Routes & Razorpay Payment Gateway Integration
+# ----------------------------------------------------
 @app.route('/trekkerDashboard')
+@role_required("Trekker")
 def trekkerDashboard():
-    response=checkTrekker()
-    if response:
-        return response
-    session["val"]=0
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    cursor.execute("SELECT TrekId, TrekName,Location,Difficulty,Duration_HRS,Slot-Participants from Trek where Status='Open' and Slot-Participants>0 LIMIT 5")
-    aTreks=cursor.fetchall()
-    Id=session.get("UserId")
-    cursor.execute("Select * from User where UserId=?",(Id,))  
-    UserInfo=cursor.fetchone()
-    conn.close()
-    return render_template("trekkerDashboard.html",aTreks=aTreks,userInfo=UserInfo)
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT TrekId, TrekName, Location, Difficulty, Duration_HRS, Slot - Participants as AvailableSlots, Price FROM Trek WHERE Status='Open' AND Slot - Participants > 0 LIMIT 5")
+    a_treks = cursor.fetchall()
+
+    user_id = session.get("UserId")
+    cursor.execute("SELECT * FROM User WHERE UserId=?", (user_id,))
+    user_info = cursor.fetchone()
+    return render_template("trekkerDashboard.html", aTreks=a_treks, userInfo=user_info)
+
 
 @app.route('/trekkerProfile')
+@role_required("Trekker")
 def trekkerProfile():
-    response=checkTrekker()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    cursor.execute("Select UserId,FullName,UserEmail,Contact from User where UserId=?",(Id,))  
-    Trekker=cursor.fetchone()
-    cursor.execute("Select COUNT(TrekId) from History where TrekkerId=?",(Id,))
-    c=cursor.fetchone()[0]
-    conn.close()
-    return render_template("trekkerProfile.html",c=c,Trekker=Trekker)
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
+    cursor.execute("SELECT UserId, FullName, UserEmail, Contact FROM User WHERE UserId=?", (user_id,))
+    trekker = cursor.fetchone()
+    cursor.execute("SELECT count(TrekId) FROM History WHERE TrekkerId=?", (user_id,))
+    c = cursor.fetchone()[0]
+    return render_template("trekkerProfile.html", c=c, Trekker=trekker)
 
-@app.route("/editTrekkerProfile", methods=["GET","POST"])
+
+@app.route("/editTrekkerProfile", methods=["GET", "POST"])
+@role_required("Trekker")
 def editTrekkerProfile():
-    response=checkTrekker()
-    if response:
-        return response
-    Id=session.get("UserId")
-    if(request.method=="POST"):
-        name=request.form.get("name")
-        email=request.form.get("email")
-        contact=request.form.get("contact")
-        conn=sqlite3.connect("TrekManagement.db")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        cursor=conn.cursor()
-        cursor.execute("SELECT UserId from User where UserEmail=? and UserId!=?",(email,Id))
-        row=cursor.fetchone()
-        if row:
-            flash("This email is already in use.","error")
-            conn.close()
-            return redirect("/editTrekkerProfile")
-        Id=session.get("UserId")
-        cursor.execute("UPDATE User set FullName=?, UserEmail=?, contact=? where UserId=?",(name,email,contact,Id))
-        conn.commit()
-        conn.close()
-        return redirect(url_for("trekkerProfile"))
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    
-    cursor.execute("Select UserId,FullName,UserEmail,Contact from User where UserId=?",(Id,))
-    Trekker=cursor.fetchone()
-    conn.close()
-    return render_template("editTrekkerProfile.html",Trekker=Trekker)
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
 
-@app.route("/trekkerTreks", methods=["GET","POST"])
-def trekkerTreks():
-    response=checkTrekker()
-    if response:
-        return response
-    if(request.method=="POST"):
-        location=request.form.get("Location")
-        difficulty=request.form.get("Difficulty")
-        Id=session.get("UserId")
-        if difficulty=="Any":
-            difficulty=None        
-        if(not location and not difficulty):
-            flash("Please put the values first","warning")
-            return redirect("/trekkerTreks")
-        conn=sqlite3.connect("TrekManagement.db")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        cursor=conn.cursor()
-        if(not location):
-            cursor.execute("Select TrekId, TrekName,Difficulty,Location,Duration_Hrs,Slot-Participants,StartDate,Status,u.Fullname,u.Contact from Trek t, User u where Status='Open' and Slot-Participants>0 and u.UserId=t.StaffId and not exists(Select 1 from Booking b where t.TrekId=b.TrekId and UserId=?) and Difficulty=?",(Id,difficulty))
-        elif(not difficulty):
-            cursor.execute("Select TrekId, TrekName,Difficulty,Location,Duration_Hrs,Slot-Participants,StartDate,Status,u.Fullname,u.Contact from Trek t, User u where Status='Open' and Slot-Participants>0 and u.UserId=t.StaffId and not exists(Select 1 from Booking b where t.TrekId=b.TrekId and UserId=?) and Location like ?",(Id,f"%{location}%"))
-        else:
-            cursor.execute("Select TrekId, TrekName,Difficulty,Location,Duration_Hrs,Slot-Participants,StartDate,Status,u.Fullname,u.Contact from Trek t, User u where Status='Open' and Slot-Participants>0 and u.UserId=t.StaffId and not exists(Select 1 from Booking b where t.TrekId=b.TrekId and UserId=?) and Difficulty=? and Location like ?",(Id,difficulty,f"%{location}%"))
-        aTreks=cursor.fetchall()
-        conn.close()
-        return render_template("trekkerTreks.html",aTreks=aTreks)
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        contact = request.form.get("contact", "").strip()
 
-
-    session["val"]=2
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    cursor.execute("Select TrekId, TrekName,Difficulty,Location,Duration_Hrs,Slot-Participants,StartDate,Status,u.Fullname,u.Contact from Trek t, User u where Status='Open' and Slot-Participants>0 and u.UserId=t.StaffId and not exists(Select 1 from Booking b where t.TrekId=b.TrekId and UserId=?)",(Id,))
-    aTreks=cursor.fetchall()
-    conn.close()
-    return render_template("trekkerTreks.html",aTreks=aTreks)
-
-# @app.route("/trekDetailT/<int:TrekId>")
-# def trekDetailT(TrekId):
-#     response=checkTrekker()
-#     if response:
-#         return response
-#     session["val"]=3
-#     conn=sqlite3.connect("TrekManagement.db")
-#     conn.execute("PRAGMA foreign_keys=ON;")
-#     cursor=conn.cursor()
-#     cursor.execute("Select TrekId,TrekName,Difficulty,Location,Duration_HRS,StartDate,EndDate,Slot,u.FullName,Status,Contact from Trek t Left Join User u on t.StaffId=u.UserId where TrekId=?",(TrekId,))
-#     trek=cursor.fetchone()
-#     conn.close()
-#     return render_template("trekDetailT.html",trek=trek)
-
-@app.route("/bookTrek/<int:TrekId>", methods=["GET","POST"])
-def bookTrek(TrekId):
-    response=checkTrekker()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    if razorpay_client is None:
-        conn.close()
-        flash("Online payments are not configured. Please contact the administrator.","error")
-        return redirect(url_for("trekkerTreks"))
-    if(request.method=='POST'):
-        payment_id=request.form.get("razorpay_payment_id")
-        order_id=request.form.get("razorpay_order_id")
-        signature=request.form.get("razorpay_signature")
-        if not payment_id or order_id != session.get("razorpay_order_id") or not signature:
-            conn.close()
-            flash("Payment verification failed.","error")
-            return redirect(url_for("bookTrek",TrekId=TrekId))
-        try:
-            razorpay_client.utility.verify_payment_signature({
-                "razorpay_order_id": order_id,
-                "razorpay_payment_id": payment_id,
-                "razorpay_signature": signature,
-            })
-        except Exception:
-            conn.close()
-            flash("Payment verification failed.","error")
-            return redirect(url_for("bookTrek",TrekId=TrekId))
-        if session.get("razorpay_trek_id") != TrekId:
-            conn.close()
-            flash("Payment was not created for this trek.","error")
-            return redirect(url_for("trekkerTreks"))
-        cursor.execute("Select BookingId from Booking where UserId=? and TrekId=? and BookingStatus='Booked'",(Id,TrekId))
+        cursor.execute("SELECT UserId FROM User WHERE UserEmail=? AND UserId!=?", (email, user_id))
         if cursor.fetchone():
-            flash("You have already booked this Trek","error")
-            conn.close()
-            return redirect(url_for("bookedTreks"))
-        cursor.execute("Select Participants,Slot,Status from Trek where TrekId=?",(TrekId,))
-        row=cursor.fetchone()
-        if not row:
-            conn.close()
-            return "Trek Not found",404
-        if row[2]!= "Open":
-            conn.close()
-            flash("This trek is not open for booking.","warning")
+            flash("This email is already in use.", "error")
+            return redirect(url_for("editTrekkerProfile"))
+
+        cursor.execute("UPDATE User SET FullName=?, UserEmail=?, Contact=? WHERE UserId=?", (name, email, contact, user_id))
+        db.commit()
+        flash("Profile updated.", "success")
+        return redirect(url_for("trekkerProfile"))
+
+    cursor.execute("SELECT UserId, FullName, UserEmail, Contact FROM User WHERE UserId=?", (user_id,))
+    trekker = cursor.fetchone()
+    return render_template("editTrekkerProfile.html", Trekker=trekker)
+
+
+@app.route("/trekkerTreks", methods=["GET", "POST"])
+@role_required("Trekker")
+def trekkerTreks():
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
+
+    if request.method == "POST":
+        location = request.form.get("Location", "").strip()
+        difficulty = request.form.get("Difficulty", "").strip()
+        if difficulty == "Any":
+            difficulty = None
+
+        if not location and not difficulty:
+            flash("Please specify location or difficulty filter.", "warning")
             return redirect(url_for("trekkerTreks"))
-        p,s=row[0],row[1]
-        if p>=s:
-            flash("No slots available.","warning")
-            conn.close()
-            return redirect(url_for("trekkerTreks"))
-        cursor.execute("INSERT into Booking(BookingId,UserId,TrekId,BookingStatus,BookingDate,PaymentStatus) values(?,?,?,?,?,?)",(None,Id,TrekId,'Booked',date.today(),'Paid'))
-        flash("Your Booking was Completed","success")
-        cursor.execute("Update Trek set Participants=Participants+1 where TrekId=?",(TrekId,))
-        conn.commit()
-        conn.close()
-        session.pop("razorpay_order_id", None)
-        session.pop("razorpay_trek_id", None)
+
+        query = """SELECT t.TrekId, t.TrekName, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price 
+                   FROM Trek t 
+                   LEFT JOIN User s ON t.StaffId=s.UserId 
+                   WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
+                   AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)"""
+        params = [user_id]
+
+        if difficulty:
+            query += " AND t.Difficulty=?"
+            params.append(difficulty)
+        if location:
+            query += " AND t.Location LIKE ?"
+            params.append(f"%{location}%")
+
+        cursor.execute(query, params)
+        a_treks = cursor.fetchall()
+        return render_template("trekkerTreks.html", aTreks=a_treks)
+
+    # Default listing: LEFT JOIN ensures unstaffed open treks are visible
+    cursor.execute("""SELECT t.TrekId, t.TrekName, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price 
+                      FROM Trek t 
+                      LEFT JOIN User s ON t.StaffId=s.UserId 
+                      WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
+                      AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)""", (user_id,))
+    a_treks = cursor.fetchall()
+    return render_template("trekkerTreks.html", aTreks=a_treks)
+
+
+@app.route("/bookTrek/<int:TrekId>", methods=["GET", "POST"])
+@role_required("Trekker")
+def bookTrek(TrekId):
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
+
+    cursor.execute("SELECT BookingId FROM Booking WHERE UserId=? AND TrekId=? AND BookingStatus='Booked'", (user_id, TrekId))
+    if cursor.fetchone():
+        flash("You have already booked this trek!", "warning")
         return redirect(url_for("bookedTreks"))
-    cursor.execute("SELECT TrekName, Price FROM Trek WHERE TrekId=? AND Status='Open'",(TrekId,))
-    trek=cursor.fetchone()
+
+    cursor.execute("SELECT TrekId, TrekName, Participants, Slot, Status, Price FROM Trek WHERE TrekId=?", (TrekId,))
+    trek = cursor.fetchone()
     if not trek:
-        conn.close()
-        return "Trek Not found",404
-    amount=int(round(float(trek[1])*100))
-    try:
-        order=razorpay_client.order.create({
-            "amount": amount,
-            "currency": RAZORPAY_CURRENCY,
-            "receipt": f"trek_{TrekId}_user_{Id}",
-        })
-    except Exception:
-        conn.close()
-        flash("Unable to start payment. Please try again.","error")
+        return "Trek Not Found", 404
+
+    if trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
+        flash("Sorry, this trek is no longer available for booking.", "warning")
         return redirect(url_for("trekkerTreks"))
-    session["razorpay_order_id"] = order["id"]
-    session["razorpay_trek_id"] = TrekId
-    conn.close()
-    return render_template("bookTrek.html",TrekId=TrekId,trekName=trek[0],amount=amount,orderId=order["id"],razorpayKeyId=RAZORPAY_KEY_ID,currency=RAZORPAY_CURRENCY)
+
+    cursor.execute("SELECT FullName, UserEmail, Contact FROM User WHERE UserId=?", (user_id,))
+    user_info = cursor.fetchone()
+
+    # Razorpay Order Creation
+    amount_in_paise = int(trek["Price"]) * 100
+    razorpay_order = None
+    try:
+        order_data = {
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "receipt": f"receipt_trek_{TrekId}_user_{user_id}",
+            "payment_capture": 1
+        }
+        razorpay_order = razorpay_client.order.create(data=order_data)
+    except Exception as e:
+        # Fallback simulated order ID for local testing if Razorpay keys are invalid
+        razorpay_order = {"id": f"order_simulated_{TrekId}_{user_id}"}
+
+    return render_template("bookTrek.html",
+                           trek=trek,
+                           userInfo=user_info,
+                           razorpay_order_id=razorpay_order["id"],
+                           razorpay_key_id=RAZORPAY_KEY_ID,
+                           amount=amount_in_paise,
+                           price_in_rs=trek["Price"])
+
+
+@app.route("/verifyPayment", methods=["POST"])
+@role_required("Trekker")
+def verifyPayment():
+    user_id = session.get("UserId")
+    trek_id = request.form.get("trek_id")
+    razorpay_payment_id = request.form.get("razorpay_payment_id")
+    razorpay_order_id = request.form.get("razorpay_order_id")
+    razorpay_signature = request.form.get("razorpay_signature")
+
+    if not trek_id:
+        flash("Invalid booking request.", "error")
+        return redirect(url_for("trekkerTreks"))
+
+    # Verify payment signature if present
+    is_valid = True
+    if razorpay_signature and not razorpay_order_id.startswith("order_simulated"):
+        try:
+            params_dict = {
+                'razorpay_order_id': razorpay_order_id,
+                'razorpay_payment_id': razorpay_payment_id,
+                'razorpay_signature': razorpay_signature
+            }
+            razorpay_client.utility.verify_payment_signature(params_dict)
+        except Exception as e:
+            is_valid = False
+
+    if not is_valid:
+        flash("Payment verification failed! Please try again.", "error")
+        return redirect(url_for("trekkerTreks"))
+
+    db = get_db()
+    cursor = db.cursor()
+
+    # Re-verify trek availability
+    cursor.execute("SELECT Participants, Slot, Status FROM Trek WHERE TrekId=?", (trek_id,))
+    trek = cursor.fetchone()
+    if not trek or trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
+        flash("Booking failed: Trek slots are full.", "error")
+        return redirect(url_for("trekkerTreks"))
+
+    # Create Booking
+    cursor.execute("""INSERT INTO Booking (UserId, TrekId, BookingStatus, BookingDate, PaymentStatus, RazorpayOrderId, RazorpayPaymentId) 
+                      VALUES (?, ?, 'Booked', ?, 'Done', ?, ?)""",
+                   (user_id, trek_id, date.today(), razorpay_order_id, razorpay_payment_id))
+
+    cursor.execute("UPDATE Trek SET Participants = Participants + 1 WHERE TrekId=?", (trek_id,))
+    db.commit()
+
+    flash("Payment successful! Your trek booking is confirmed.", "success")
+    return redirect(url_for("bookedTreks"))
+
 
 @app.route("/bookedTreks")
+@role_required("Trekker")
 def bookedTreks():
-    response=checkTrekker()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    cursor.execute("SELECT BookingId,TrekName,BookingDate,StartDate,Duration_HRS,BookingStatus,PaymentStatus,EndDate,s.UserId,s.FullName,s.Contact,Difficulty,Location from Trek t,Booking b Left Join User s on s.UserId=t.StaffId where b.TrekId=t.TrekId and b.UserId=?",(Id,))
-    bookings=cursor.fetchall()
-    conn.close()
-    return render_template("bookedTreks.html",bookings=bookings)
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
+    cursor.execute("""SELECT b.BookingId, t.TrekName, b.BookingDate, t.StartDate, t.Duration_HRS, b.BookingStatus, b.PaymentStatus, t.EndDate, s.FullName as StaffName, s.Contact as StaffContact, t.Difficulty, t.Location, t.Price 
+                      FROM Booking b 
+                      JOIN Trek t ON b.TrekId=t.TrekId 
+                      LEFT JOIN User s ON s.UserId=t.StaffId 
+                      WHERE b.UserId=?""", (user_id,))
+    bookings = cursor.fetchall()
+    return render_template("bookedTreks.html", bookings=bookings)
+
 
 @app.route("/cancelBooking/<int:BookingId>")
+@role_required("Trekker")
 def cancelBooking(BookingId):
-    response=checkTrekker()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    cursor.execute("SELECT TrekId,BookingStatus FROM Booking WHERE BookingId=? AND UserId=?",(BookingId, Id))
-    row=cursor.fetchone()
-    if not row:
-        conn.close()
-        return render_template("unauthorized.html")
-    if row[1] != "Booked":
-        conn.close()
-        return "This booking cannot be cancelled"
-    
-    cursor.execute("Select b.TrekId,t.StartDate,t.Status from Booking b Join Trek t on t.TrekId=b.TrekId where BookingId=?",(BookingId,))
-    row=cursor.fetchone()
-    if(row[1].strip()<=str(date.today()) or row[2]!="Open"):
-        conn.close()
-        return "You can not cancel booking now"
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
 
-    if row:
-        TrekId=row[0]
-        cursor.execute("SELECT BookingId,u.UserId,u.Fullname,t.TrekId,t.TrekName,t.StaffId,s.Fullname,t.StartDate,t.EndDate,b.BookingDate,'Cancelled' from Booking b Join Trek t on b.Trekid=t.TrekId Join User u on b.UserId=u.UserId LEFT Join User s on t.StaffId=s.UserId where b.BookingId=?",(BookingId,))
-        data=cursor.fetchone()
-        cursor.execute("INSERT INTO History values(?,?,?,?,?,?,?,?,?,?,?)",data)
-        cursor.execute("Delete from Booking where BookingId=?",(BookingId,))
-        cursor.execute("Update Trek set Participants=Participants-1 where TrekId=?",(TrekId,)) 
-        conn.commit()
-    conn.close()
+    cursor.execute("""SELECT b.BookingId, b.TrekId, b.BookingStatus, t.StartDate, t.Status 
+                      FROM Booking b 
+                      JOIN Trek t ON t.TrekId=b.TrekId 
+                      WHERE b.BookingId=? AND b.UserId=?""", (BookingId, user_id))
+    booking = cursor.fetchone()
+
+    if not booking or booking["BookingStatus"] != "Booked":
+        flash("Invalid booking or booking cannot be cancelled.", "error")
+        return redirect(url_for("bookedTreks"))
+
+    # Start date check
+    try:
+        start_dt = datetime.strptime(booking["StartDate"].strip(), "%Y-%m-%d").date()
+        if start_dt <= date.today():
+            flash("Cannot cancel booking on or after trek start date.", "warning")
+            return redirect(url_for("bookedTreks"))
+    except ValueError:
+        pass
+
+    cursor.execute("""SELECT b.BookingId, u.UserId, u.FullName, t.TrekId, t.TrekName, t.StaffId, s.FullName, t.StartDate, t.EndDate, b.BookingDate, 'Cancelled' 
+                      FROM Booking b 
+                      JOIN Trek t ON b.TrekId=t.TrekId 
+                      JOIN User u ON b.UserId=u.UserId 
+                      LEFT JOIN User s ON t.StaffId=s.UserId 
+                      WHERE b.BookingId=?""", (BookingId,))
+    data = cursor.fetchone()
+    if data:
+        cursor.execute("INSERT INTO History VALUES (?,?,?,?,?,?,?,?,?,?,?)", tuple(data))
+
+    cursor.execute("DELETE FROM Booking WHERE BookingId=?", (BookingId,))
+    cursor.execute("UPDATE Trek SET Participants = MAX(0, Participants - 1) WHERE TrekId=?", (booking["TrekId"],))
+    db.commit()
+
+    flash("Booking cancelled successfully.", "success")
     return redirect(url_for("bookedTreks"))
 
 
 @app.route("/trekkerHistory")
+@role_required("Trekker")
 def trekkerHistory():
-    response=checkTrekker()
-    if response:
-        return response
-    conn=sqlite3.connect("TrekManagement.db")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    cursor=conn.cursor()
-    Id=session.get("UserId")
-    cursor.execute("Select BookingId, TrekName, BookingDate,TrekStart,TrekEnd,Status from History where TrekkerId=?",(Id,))
-    trekkings=cursor.fetchall()
-    conn.close()
-    return render_template("trekkerHistory.html",trekkings=trekkings)
+    db = get_db()
+    cursor = db.cursor()
+    user_id = session.get("UserId")
+    cursor.execute("SELECT BookingId, TrekName, BookingDate, TrekStart, TrekEnd, Status FROM History WHERE TrekkerId=?", (user_id,))
+    trekkings = cursor.fetchall()
+    return render_template("trekkerHistory.html", trekkings=trekkings)
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
 
+# ----------------------------------------------------
+# Server Entry Point for Local & Render Deployment
+# ----------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)

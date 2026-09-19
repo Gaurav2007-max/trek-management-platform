@@ -1,47 +1,48 @@
 {% extends "staffLayout.html" %}
+{% block title %}Trek Participants - TrekTerrain{% endblock %}
+
 {% block content %}
-
-{% if aTreks %}
-<h4 class="mx-2">  Assigned Treks</h4>
-{% for aTrek in aTreks %}
-<div class="table-responsive " style="padding:10px ;margin-right:10%">
-    <h6>{{loop.index}}. {{aTrek[1]}}</h6>
-    <table class="table table-striped table-hover" style="margin-top:10px; ">
-        <thead class="table-primary">
-            <tr>
-                <th>S.No</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Contact</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% set matched=[] %}
-        {% for trekker in Trekkers %}
-        {% if trekker[0]==aTrek[0] %}
-            <tr>
-                <td>{{loop.index}}</td>
-                <td>{{trekker[2]}}</td>
-                <td>{{trekker[3]}}</td>
-                <td>{{trekker[4]}}</td>
-                <td><a class="btn btn-danger" href="/removeParticipant/{{trekker[1]}}/{{trekker[0]}}">Remove</a></td>
-                {% if matched.append(trekker[1]) %}{% endif %}
-            </tr>
-        {% endif %}
-        {% endfor %}
-        {% if matched|length==0 %}
-        <tr>
-            <td colspan="5">No Participants for this trek</td>
-        </tr>
-        {% endif %}
-        </tbody>
-    </table>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-people text-primary me-2"></i> Assigned Trek Participants</h3>
+        <p class="text-muted small mb-0">View registered trekkers participating in your active treks.</p>
+    </div>
 </div>
-{% endfor %}
-{% else %}
-<h6>No current Participants</h6>
-{% endif %}
+
+<div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Trek Name</th>
+                        <th>Trekker Name</th>
+                        <th>Email Address</th>
+                        <th>Contact</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in Trekkers %}
+                    <tr>
+                        <td class="fw-bold">{{ p.TrekName }} <small class="text-muted">(#{{ p.TrekId }})</small></td>
+                        <td>{{ p.FullName }}</td>
+                        <td>{{ p.UserEmail }}</td>
+                        <td>{{ p.Contact or 'N/A' }}</td>
+                        <td class="text-end">
+                            <a href="{{ url_for('removeParticipant', trekkerId=p.UserId, trekId=p.TrekId) }}" class="btn btn-sm btn-outline-danger rounded-pill" onclick="return confirm('Remove this participant from trek?');">
+                                <i class="bi bi-person-dash me-1"></i> Remove
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">No active trek participants registered for your treks.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {% endblock %}
-
-

@@ -1,35 +1,46 @@
-{% extends 'trekkerLayout.html' %}
+{% extends "trekkerLayout.html" %}
+{% block title %}My Trekking History - TrekTerrain{% endblock %}
+
 {% block content %}
-<div class="table-responsive" style="padding:10px">
-<H4>Trekking History</H4>
-{% if trekkings %}
-<table class="table table-striped table-hover" style="margin-top:10px; ">
-    <thead class="table-primary">
-    <tr>
-        <th>S.No</th>
-        <th>Trek Name</th>
-        <th>Booked Date</th>
-        <th>Trek Date</th>
-        <th>Completion Date</th>
-        <th>Status</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for trekking in trekkings %}
-    <tr>
-        <td>{{loop.index}}</td>
-        <td>{{trekking[1]}}</td>
-        <td>{{trekking[2]}}</td>
-        <td>{{trekking[3]}}</td>
-        <td>{{trekking[4]}}</td>
-        <td>{{trekking[5]}}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<h6>No History Found</h6>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-clock-history text-success me-2"></i> My Trekking History</h3>
+        <p class="text-muted small mb-0">Past completed and cancelled trek bookings.</p>
+    </div>
 </div>
-<a class="btn btn-primary" href="/trekkerTreks">Book Now</a>
-{% endif %}
+
+<div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Booking ID</th>
+                        <th>Trek Name</th>
+                        <th>Booking Date</th>
+                        <th>Trek Dates</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in trekkings %}
+                    <tr>
+                        <td class="fw-bold">#{{ h.BookingId }}</td>
+                        <td>{{ h.TrekName }}</td>
+                        <td>{{ h.BookingDate }}</td>
+                        <td class="small">{{ h.TrekStart }} to {{ h.TrekEnd }}</td>
+                        <td>
+                            <span class="badge badge-status badge-{{ 'completed' if h.Status=='Completed' else 'cancelled' }}">{{ h.Status }}</span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">No trekking history logged yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {% endblock %}

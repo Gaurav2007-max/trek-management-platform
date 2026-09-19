@@ -1,18 +1,25 @@
 {% extends "trekkerLayout.html" %}
-{% block content %}
+{% block title %}My Profile - Trekker{% endblock %}
 
-<div class="d-flex justify-content-center align-items-center">
-<div class="card my-5">
-  <div class="card-body">
-    <h5 class="card-title">Name : {{Trekker[1]}}</h5>
-    <h6 class="card-subtitle mb-2 text-body-secondary">Trekker ID : {{Trekker[0]}}</h6>
-    <p class="card-text"><div>
-        Email : {{Trekker[2]}}<br>
-        Contact : {{Trekker[3]}}<br>
-        Completed Treks: {{c}}
-    </div></p>
-    <a class="btn btn-primary" href="/editTrekkerProfile">Edit Profile</a>
-  </div>
-  </div>
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 p-4 text-center">
+            <div class="display-3 text-success mb-2"><i class="bi bi-person-circle"></i></div>
+            <h4 class="fw-bold mb-1">{{ Trekker.FullName }}</h4>
+            <span class="badge bg-success-subtle text-success px-3 py-1 rounded-pill mx-auto mb-3">Trekker Participant</span>
+
+            <div class="text-start bg-light p-3 rounded-3 mb-4 small">
+                <p class="mb-2"><strong>User ID:</strong> #{{ Trekker.UserId }}</p>
+                <p class="mb-2"><strong>Email Address:</strong> {{ Trekker.UserEmail }}</p>
+                <p class="mb-2"><strong>Contact Number:</strong> {{ Trekker.Contact or 'N/A' }}</p>
+                <p class="mb-0"><strong>Completed Treks:</strong> {{ c }}</p>
+            </div>
+
+            <a href="{{ url_for('editTrekkerProfile') }}" class="btn btn-success rounded-pill py-2 fw-bold">
+                <i class="bi bi-pencil me-1"></i> Edit Profile
+            </a>
+        </div>
+    </div>
 </div>
 {% endblock %}

@@ -3,67 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <title>Sign In - TrekTerrain</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
+    <style>
+        body {
+            background: linear-gradient(135deg, rgba(15, 81, 50, 0.85), rgba(17, 24, 39, 0.9)), url("{{ url_for('static', filename='images/hero_trek.jpg') }}");
+            background-size: cover;
+            background-position: center;
+            min-height: 100vh;
+        }
+    </style>
 </head>
-<body class="bg-light">
-    <main class="container py-5">
-    <div class="row justify-content-center align-items-center min-vh-100">
-    <div class="col-12 col-sm-10 col-md-7 col-lg-5">
-    <div class="text-center mb-4">
-        <h1 class="display-6 fw-semibold">TrekTerrain</h1>
-        <p class="text-body-secondary mb-0">Plan the trail. Find your next trek.</p>
-    </div>
-    <div class="flash-container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    {% if category == 'success' %}
-                        <div class="alert alert-success alert-dismissible fade show flash-alert" role="alert">
-                            <strong>Success!</strong> {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<body class="d-flex align-items-center justify-content-center py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-6 col-lg-5">
+                <div class="auth-card mx-auto">
+                    <div class="text-center mb-4">
+                        <div class="display-6 text-success fw-bold">
+                            <i class="bi bi-mountain"></i> TrekTerrain
                         </div>
-                    {% elif category == 'error' %}
-                        <div class="alert alert-danger alert-dismissible fade show flash-alert" role="alert">
-                            <strong>Error!</strong> {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        <p class="text-muted small">Welcome back! Please sign in to your account.</p>
+                    </div>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show small mb-3" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form action="{{ url_for('login') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="username" class="form-label fw-semibold">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control" id="username" name="Username" placeholder="name@example.com" required maxlength="100">
+                            </div>
                         </div>
-                    {% elif category == 'warning' %}
-                        <div class="alert alert-warning alert-dismissible fade show flash-alert" role="alert">
-                            <strong>Warning!</strong> {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+
+                        <div class="mb-4">
+                            <label for="password" class="form-label fw-semibold">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" id="password" name="Password" placeholder="••••••••" required minlength="6" maxlength="30">
+                            </div>
                         </div>
-                    {% else %}
-                        <div class="alert alert-info alert-dismissible fade show flash-alert" role="alert">
-                            <strong>Message!</strong> {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </div>        
-        <div id="form" class="card border-0 shadow-sm">
-            <div class="card-body p-4 p-md-5">
-                <h2 class="h4 mb-1">Welcome back</h2>
-                <p class="text-body-secondary mb-4">Sign in to continue your journey.</p>
-        <form action="/login" method="POST">
-            <div class="mb-3">
-                <label class="form-label" for="username">Email address</label>
-                <input class="form-control" id="username" type="email" name="Username" required maxlength="100" autocomplete="email">
+
+                        <button type="submit" class="btn btn-primary-custom w-100 py-2 mb-3">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                        </button>
+                    </form>
+
+                    <div class="text-center mt-3 pt-3 border-top">
+                        <span class="text-muted small">Don't have an account?</span>
+                        <a href="{{ url_for('register') }}" class="fw-semibold text-decoration-none text-success ms-1">Register Now</a>
+                    </div>
+                </div>
             </div>
-            <div class="mb-4">
-                <label class="form-label" for="password">Password</label>
-                <input class="form-control" id="password" type="password" name="Password" required minlength="6" maxlength="30" autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn btn-primary w-100">Sign in</button>
-        </form>
-        <p class="text-center text-body-secondary mt-4 mb-0">New here? <a href="/register">Create an account</a></p>
-      </div>
+        </div>
     </div>
-    </div>
-    </div>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

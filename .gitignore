@@ -1,5 +1,22 @@
+# Environment variables
 .env
-.env.*
+
+TrekManagement.db
+
+
+# Python artifacts
 __pycache__/
 *.py[cod]
-*.db
+*$py.class
+venv/
+env/
+.venv/
+
+# Database files (optional: comment out if seeding initial DB in git)
+*.db-journal
+*.db-wal
+
+# Antigravity & IDE
+.vscode/
+.idea/
+.gemini/
