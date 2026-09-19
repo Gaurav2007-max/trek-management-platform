@@ -13,12 +13,13 @@ load_dotenv()
 DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "trekker_secret_key_default")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY", "trekker_secret_key_default")
 
 # Initialize Razorpay Client
-RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_SampleKeyId1234")
-RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "SampleKeySecret12345678")
-razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET")
+RAZORPAY_CURRENCY = os.environ.get("RAZORPAY_CURRENCY", "INR")
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET else None
 
 # ----------------------------------------------------
 # Database Helpers & Migration
@@ -31,7 +32,7 @@ def get_db():
     return g.db
 
 @app.teardown_appcontext
-def close_db(exception):
+def close_db(_exception):
     db = g.pop('db', None)
     if db is not None:
         db.close()
@@ -1127,6 +1128,10 @@ def bookTrek(TrekId):
     cursor = db.cursor()
     user_id = session.get("UserId")
 
+    if razorpay_client is None:
+        flash("Online payments are not configured. Please contact the administrator.", "error")
+        return redirect(url_for("trekkerTreks"))
+
     cursor.execute("SELECT BookingId FROM Booking WHERE UserId=? AND TrekId=? AND BookingStatus='Booked'", (user_id, TrekId))
     if cursor.fetchone():
         flash("You have already booked this trek!", "warning")
@@ -1144,20 +1149,22 @@ def bookTrek(TrekId):
     cursor.execute("SELECT FullName, UserEmail, Contact FROM User WHERE UserId=?", (user_id,))
     user_info = cursor.fetchone()
 
-    # Razorpay Order Creation
-    amount_in_paise = int(trek["Price"]) * 100
-    razorpay_order = None
+    amount_in_paise = int(round(float(trek["Price"]) * 100))
     try:
         order_data = {
             "amount": amount_in_paise,
-            "currency": "INR",
+            "currency": RAZORPAY_CURRENCY,
             "receipt": f"receipt_trek_{TrekId}_user_{user_id}",
             "payment_capture": 1
         }
         razorpay_order = razorpay_client.order.create(data=order_data)
-    except Exception as e:
-        # Fallback simulated order ID for local testing if Razorpay keys are invalid
-        razorpay_order = {"id": f"order_simulated_{TrekId}_{user_id}"}
+    except Exception:
+        app.logger.exception("Razorpay order creation failed for trek %s and user %s", TrekId, user_id)
+        flash("Unable to start payment. Please try again.", "error")
+        return redirect(url_for("trekkerTreks"))
+
+    session["razorpay_order_id"] = razorpay_order["id"]
+    session["razorpay_trek_id"] = TrekId
 
     return render_template("bookTrek.html",
                            trek=trek,
@@ -1165,7 +1172,8 @@ def bookTrek(TrekId):
                            razorpay_order_id=razorpay_order["id"],
                            razorpay_key_id=RAZORPAY_KEY_ID,
                            amount=amount_in_paise,
-                           price_in_rs=trek["Price"])
+                           price_in_rs=trek["Price"],
+                           currency=RAZORPAY_CURRENCY)
 
 
 @app.route("/verifyPayment", methods=["POST"])
@@ -1177,24 +1185,24 @@ def verifyPayment():
     razorpay_order_id = request.form.get("razorpay_order_id")
     razorpay_signature = request.form.get("razorpay_signature")
 
-    if not trek_id:
+    if not trek_id or not razorpay_payment_id or not razorpay_order_id or not razorpay_signature:
         flash("Invalid booking request.", "error")
         return redirect(url_for("trekkerTreks"))
 
-    # Verify payment signature if present
-    is_valid = True
-    if razorpay_signature and not razorpay_order_id.startswith("order_simulated"):
-        try:
-            params_dict = {
-                'razorpay_order_id': razorpay_order_id,
-                'razorpay_payment_id': razorpay_payment_id,
-                'razorpay_signature': razorpay_signature
-            }
-            razorpay_client.utility.verify_payment_signature(params_dict)
-        except Exception as e:
-            is_valid = False
+    if (razorpay_client is None
+            or session.get("razorpay_order_id") != razorpay_order_id
+            or session.get("razorpay_trek_id") != int(trek_id)):
+        flash("Payment verification failed! Please try again.", "error")
+        return redirect(url_for("trekkerTreks"))
 
-    if not is_valid:
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": razorpay_order_id,
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature
+        })
+    except Exception:
+        app.logger.exception("Razorpay payment verification failed for order %s", razorpay_order_id)
         flash("Payment verification failed! Please try again.", "error")
         return redirect(url_for("trekkerTreks"))
 
@@ -1215,6 +1223,9 @@ def verifyPayment():
 
     cursor.execute("UPDATE Trek SET Participants = Participants + 1 WHERE TrekId=?", (trek_id,))
     db.commit()
+
+    session.pop("razorpay_order_id", None)
+    session.pop("razorpay_trek_id", None)
 
     flash("Payment successful! Your trek booking is confirmed.", "success")
     return redirect(url_for("bookedTreks"))

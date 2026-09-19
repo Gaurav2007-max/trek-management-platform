@@ -11,7 +11,7 @@
                         <h3 class="fw-bold mb-1"><i class="bi bi-shield-check me-2"></i> Confirm Trek Booking</h3>
                         <p class="mb-0 opacity-75 small">Review details and proceed with online payment</p>
                     </div>
-                    <span class="badge bg-light text-success fs-6 px-3 py-2 rounded-pill">₹{{ price_in_rs }}</span>
+                        <span class="badge bg-light text-success fs-6 px-3 py-2 rounded-pill">{{ currency }} {{ price_in_rs }}</span>
                 </div>
             </div>
             <div class="card-body p-4">
@@ -20,7 +20,7 @@
                         <div class="p-3 bg-light rounded-3 border h-100">
                             <h6 class="text-muted text-uppercase small fw-bold mb-3"><i class="bi bi-compass me-1"></i> Trek Information</h6>
                             <p class="mb-2"><strong>Trek Name:</strong> {{ trek['TrekName'] }}</p>
-                            <p class="mb-2"><strong>Price:</strong> <span class="text-success fw-bold">₹{{ price_in_rs }} INR</span></p>
+                            <p class="mb-2"><strong>Price:</strong> <span class="text-success fw-bold">{{ currency }} {{ price_in_rs }}</span></p>
                             <p class="mb-0"><strong>Status:</strong> <span class="badge badge-status badge-open">{{ trek['Status'] }}</span></p>
                         </div>
                     </div>
@@ -35,7 +35,7 @@
                 </div>
 
                 <div class="alert alert-info border-0 bg-info-subtle text-info-emphasis d-flex align-items-center rounded-3 mb-4">
-                    <i class="bi bi-lock-fill fs-4 me-3"></i>
+                            <i class="bi bi-lock-fill fs-4 me-3"></i>
                     <div>
                         <strong>Secure Razorpay Payment</strong><br>
                         <small>Click below to complete your payment via UPI, Credit/Debit Card, or NetBanking.</small>
@@ -53,7 +53,7 @@
                             <i class="bi bi-arrow-left me-1"></i> Back to Treks
                         </a>
                         <button type="button" id="pay-btn" class="btn btn-success btn-lg px-5 shadow-sm fw-bold">
-                            <i class="bi bi-credit-card me-2"></i> Pay ₹{{ price_in_rs }} & Book
+                            <i class="bi bi-credit-card me-2"></i> Pay {{ currency }} {{ price_in_rs }} & Book
                         </button>
                     </div>
                 </form>
@@ -68,7 +68,7 @@
     const options = {
         "key": "{{ razorpay_key_id }}",
         "amount": "{{ amount }}",
-        "currency": "INR",
+        "currency": "{{ currency }}",
         "name": "Crack the Trek",
         "description": "Payment for {{ trek['TrekName'] }}",
         "image": "{{ url_for('static', filename='logo.png') }}",
@@ -90,12 +90,6 @@
     };
 
     document.getElementById('pay-btn').onclick = function(e){
-        if ("{{ razorpay_order_id }}".startsWith("order_simulated")) {
-            document.getElementById('razorpay_payment_id').value = "pay_simulated_" + Date.now();
-            document.getElementById('razorpay_signature').value = "sig_simulated";
-            document.getElementById('razorpay-form').submit();
-            return;
-        }
         const rzp1 = new Razorpay(options);
         rzp1.open();
         e.preventDefault();
