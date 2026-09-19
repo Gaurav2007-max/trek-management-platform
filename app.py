@@ -21,7 +21,7 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "SampleKeySecret1234
 razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 # ----------------------------------------------------
-# Database Helpers & Initialization
+# Database Helpers & Migration
 # ----------------------------------------------------
 def get_db():
     if 'db' not in g:
@@ -185,12 +185,13 @@ def login():
 
         if user:
             stored_password = user["UserPassword"]
+            # Support both hashed passwords and backward-compatible plain passwords
             is_valid = False
             if stored_password.startswith("scrypt:") or stored_password.startswith("pbkdf2:"):
                 is_valid = check_password_hash(stored_password, password)
             else:
                 is_valid = (stored_password == password)
-                if is_valid:
+                if is_valid: # Upgrade to hashed password transparently
                     new_hashed = generate_password_hash(password)
                     cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (new_hashed, user["UserId"]))
                     db.commit()
@@ -1109,6 +1110,7 @@ def trekkerTreks():
         a_treks = cursor.fetchall()
         return render_template("trekkerTreks.html", aTreks=a_treks)
 
+    # Default listing: LEFT JOIN ensures unstaffed open treks are visible
     cursor.execute("""SELECT t.TrekId, t.TrekName, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price 
                       FROM Trek t 
                       LEFT JOIN User s ON t.StaffId=s.UserId 
@@ -1154,6 +1156,7 @@ def bookTrek(TrekId):
         }
         razorpay_order = razorpay_client.order.create(data=order_data)
     except Exception as e:
+        # Fallback simulated order ID for local testing if Razorpay keys are invalid
         razorpay_order = {"id": f"order_simulated_{TrekId}_{user_id}"}
 
     return render_template("bookTrek.html",
@@ -1178,6 +1181,7 @@ def verifyPayment():
         flash("Invalid booking request.", "error")
         return redirect(url_for("trekkerTreks"))
 
+    # Verify payment signature if present
     is_valid = True
     if razorpay_signature and not razorpay_order_id.startswith("order_simulated"):
         try:
@@ -1197,12 +1201,14 @@ def verifyPayment():
     db = get_db()
     cursor = db.cursor()
 
+    # Re-verify trek availability
     cursor.execute("SELECT Participants, Slot, Status FROM Trek WHERE TrekId=?", (trek_id,))
     trek = cursor.fetchone()
     if not trek or trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
         flash("Booking failed: Trek slots are full.", "error")
         return redirect(url_for("trekkerTreks"))
 
+    # Create Booking
     cursor.execute("""INSERT INTO Booking (UserId, TrekId, BookingStatus, BookingDate, PaymentStatus, RazorpayOrderId, RazorpayPaymentId) 
                       VALUES (?, ?, 'Booked', ?, 'Done', ?, ?)""",
                    (user_id, trek_id, date.today(), razorpay_order_id, razorpay_payment_id))
@@ -1246,6 +1252,7 @@ def cancelBooking(BookingId):
         flash("Invalid booking or booking cannot be cancelled.", "error")
         return redirect(url_for("bookedTreks"))
 
+    # Start date check
     try:
         start_dt = datetime.strptime(booking["StartDate"].strip(), "%Y-%m-%d").date()
         if start_dt <= date.today():
