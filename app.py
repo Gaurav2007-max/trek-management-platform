@@ -7,7 +7,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import razorpay
 
-# Load environment variables
 load_dotenv()
 
 DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
@@ -15,15 +14,11 @@ DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY", "trekker_secret_key_default")
 
-# Initialize Razorpay Client
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET")
 RAZORPAY_CURRENCY = os.environ.get("RAZORPAY_CURRENCY", "INR")
 razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET else None
 
-# ----------------------------------------------------
-# Database Helpers & Migration
-# ----------------------------------------------------
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DATABASE)
@@ -100,7 +95,6 @@ def init_db():
         Status TEXT
     );""")
 
-    # Column migrations if database already existed without new columns
     cursor.execute("PRAGMA table_info(Trek)")
     trek_cols = [col[1] for col in cursor.fetchall()]
     if 'Price' not in trek_cols:
@@ -113,24 +107,24 @@ def init_db():
     if 'RazorpayPaymentId' not in booking_cols:
         cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayPaymentId TEXT;")
 
-    # Default admin user creation with hashed password
-    cursor.execute("SELECT * FROM User WHERE UserEmail='aroraganesh2007@gmail.com'")
-    admin = cursor.fetchone()
-    if not admin:
-        hashed_admin_pass = generate_password_hash("15022026")
-        cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, ?, ?)",
-                       ("Gaurav", "aroraganesh2007@gmail.com", hashed_admin_pass, "Admin", "9999999999"))
+    demo_users = [
+        ("Gaurav", "aroraganesh2007@gmail.com", "Admin", "9999999999"),
+        ("Sample Trekker", "trekker@example.com", "Trekker", "9999999998"),
+        ("Sample Staff", "staff@example.com", "Staff", "9999999997"),
+    ]
+    hashed_demo_password = generate_password_hash("15022026")
+    for full_name, email, role, contact in demo_users:
+        cursor.execute("SELECT UserId FROM User WHERE UserEmail=?", (email,))
+        if cursor.fetchone() is None:
+            cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, ?, ?)",
+                           (full_name, email, hashed_demo_password, role, contact))
 
     conn.commit()
     conn.close()
 
-# Initialize DB structure on startup
 init_db()
 
 
-# ----------------------------------------------------
-# Authentication & Authorization Decorators
-# ----------------------------------------------------
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -153,9 +147,6 @@ def role_required(role):
     return decorator
 
 
-# ----------------------------------------------------
-# Auth Routes
-# ----------------------------------------------------
 @app.route('/', methods=["GET", "POST"])
 def index():
     if "UserId" in session:
@@ -186,13 +177,12 @@ def login():
 
         if user:
             stored_password = user["UserPassword"]
-            # Support both hashed passwords and backward-compatible plain passwords
             is_valid = False
             if stored_password.startswith("scrypt:") or stored_password.startswith("pbkdf2:"):
                 is_valid = check_password_hash(stored_password, password)
             else:
                 is_valid = (stored_password == password)
-                if is_valid: # Upgrade to hashed password transparently
+                if is_valid:
                     new_hashed = generate_password_hash(password)
                     cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (new_hashed, user["UserId"]))
                     db.commit()
@@ -275,9 +265,6 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ----------------------------------------------------
-# Admin Routes
-# ----------------------------------------------------
 @app.route('/adminDashboard')
 @role_required("Admin")
 def adminDashboard():
@@ -779,9 +766,6 @@ def searchHistory(x, y, s):
     return render_template("adminHistory.html", trekkings=trekkings)
 
 
-# ----------------------------------------------------
-# Staff Routes
-# ----------------------------------------------------
 @app.route('/staffDashboard')
 @role_required("Staff")
 def staffDashboard():
@@ -1019,9 +1003,6 @@ def removeParticipant(trekkerId, trekId):
     return redirect(url_for("staffTrekkers"))
 
 
-# ----------------------------------------------------
-# Trekker Routes & Razorpay Payment Gateway Integration
-# ----------------------------------------------------
 @app.route('/trekkerDashboard')
 @role_required("Trekker")
 def trekkerDashboard():
@@ -1111,7 +1092,6 @@ def trekkerTreks():
         a_treks = cursor.fetchall()
         return render_template("trekkerTreks.html", aTreks=a_treks)
 
-    # Default listing: LEFT JOIN ensures unstaffed open treks are visible
     cursor.execute("""SELECT t.TrekId, t.TrekName, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price 
                       FROM Trek t 
                       LEFT JOIN User s ON t.StaffId=s.UserId 
@@ -1209,14 +1189,12 @@ def verifyPayment():
     db = get_db()
     cursor = db.cursor()
 
-    # Re-verify trek availability
     cursor.execute("SELECT Participants, Slot, Status FROM Trek WHERE TrekId=?", (trek_id,))
     trek = cursor.fetchone()
     if not trek or trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
         flash("Booking failed: Trek slots are full.", "error")
         return redirect(url_for("trekkerTreks"))
 
-    # Create Booking
     cursor.execute("""INSERT INTO Booking (UserId, TrekId, BookingStatus, BookingDate, PaymentStatus, RazorpayOrderId, RazorpayPaymentId) 
                       VALUES (?, ?, 'Booked', ?, 'Done', ?, ?)""",
                    (user_id, trek_id, date.today(), razorpay_order_id, razorpay_payment_id))
@@ -1263,7 +1241,6 @@ def cancelBooking(BookingId):
         flash("Invalid booking or booking cannot be cancelled.", "error")
         return redirect(url_for("bookedTreks"))
 
-    # Start date check
     try:
         start_dt = datetime.strptime(booking["StartDate"].strip(), "%Y-%m-%d").date()
         if start_dt <= date.today():
@@ -1301,9 +1278,6 @@ def trekkerHistory():
     return render_template("trekkerHistory.html", trekkings=trekkings)
 
 
-# ----------------------------------------------------
-# Server Entry Point for Local & Render Deployment
-# ----------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
