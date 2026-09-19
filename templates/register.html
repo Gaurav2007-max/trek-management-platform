@@ -6,8 +6,14 @@
     <title>Register</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
-<body >
-    <div class="d-flex flex-column justify-content-center align-items-center vh-100">
+<body class="bg-light">
+    <main class="container py-5">
+    <div class="row justify-content-center">
+    <div class="col-12 col-md-9 col-lg-7">
+    <div class="text-center mb-4">
+        <h1 class="display-6 fw-semibold">Join TrekTerrain</h1>
+        <p class="text-body-secondary mb-0">Create an account and start exploring.</p>
+    </div>
     <div class="flash-container ">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -37,34 +43,56 @@
             {% endif %}
         {% endwith %}
     </div>     
-    <div id="form">
+    <div id="form" class="card border-0 shadow-sm">
+    <div class="card-body p-4 p-md-5">
+        <h2 class="h4 mb-1">Create your account</h2>
+        <p class="text-body-secondary mb-4">All fields are required.</p>
         <form action="/register" method="POST">
-            <label for="fullname">Fullname:</label><small class="form-text text-muted"> (Maxlength 50 Only alphabets allowed)</small><br>
-            <input class="form-control"type="text" id="fullname" name="Fullname" required minlength="1" maxlength="50" pattern="[A-Za-z ]+">
+            <div class="mb-3">
+            <label class="form-label" for="fullname">Full name</label>
+            <input class="form-control" type="text" id="fullname" name="Fullname" required minlength="1" maxlength="50" pattern="[A-Za-z ]+">
+            </div>
 
-            <label for="email">Email:</label><small class="form-text text-muted"> (Maxlength 100)</small><br>
-            <input class="form-control"type="email" id="email" name="Email" required maxlength="100">
+            <div class="mb-3">
+            <label class="form-label" for="email">Email address</label>
+            <input class="form-control" type="email" id="email" name="Email" required maxlength="100" autocomplete="email">
+            </div>
             
-            <label for="password">Password:</label><small class="form-text text-muted"> (Minlength 6 maxlength 30)</small><br>
-            <input class="form-control"type="password" id="password" name="Password" required minlength="6" maxlength="30">
+            <div class="row g-3 mb-3">
+            <div class="col-md-6">
+            <label class="form-label" for="password">Password</label>
+            <input class="form-control" type="password" id="password" name="Password" required minlength="6" maxlength="30" autocomplete="new-password">
+            </div>
             
-            <label for="password2">Confirm Password:</label><small class="form-text text-muted"> (Minlength 6 maxlength 30)</small><br>
-            <input class="form-control"type="password" id="password2" name="Password2" required minlength="6" maxlength="30">
+            <div class="col-md-6">
+            <label class="form-label" for="password2">Confirm password</label>
+            <input class="form-control" type="password" id="password2" name="Password2" required minlength="6" maxlength="30" autocomplete="new-password">
+            </div>
+            </div>
             
-            <label for="contact">Contact:</label><small class="form-text text-muted"> (Only 10 digit number no country code like +91)</small><br>
-            <input class="form-control"type="text" id="contact" name="Contact" required pattern="[0-9]{10}">
+            <div class="row g-3 mb-3">
+            <div class="col-md-6">
+            <label class="form-label" for="contact">Contact number</label>
+            <input class="form-control" type="text" id="contact" name="Contact" required pattern="[0-9]{10}" inputmode="numeric">
+            </div>
             
-            <label for="role">I am a</label>
-            <select class="form-control" name="Role" id="role">
+            <div class="col-md-6">
+            <label class="form-label" for="role">Account type</label>
+            <select class="form-select" name="Role" id="role" required>
                 <option value="" disabled selected>Select Role</option>
                 <option value="Staff">Trek Staff</option>
                 <option value="Trekker">Trekker</option>
-            </select><br>
-            <div><button class="btn btn-primary" type="submit" value="submit">Submit</button></div>
-        </form><br>        
-        <div><a href="/">Already Registered? Login Here</a></div>
+            </select>
+            </div>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Create account</button>
+        </form>
+        <p class="text-center text-body-secondary mt-4 mb-0">Already registered? <a href="/">Sign in</a></p>
     </div>
     </div>
+    </div>
+    </div>
+    </main>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 </body>
 </html>

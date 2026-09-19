@@ -1,16 +1,22 @@
 {% extends "trekkerLayout.html" %}
 {% block content %}
-<h4 class="mx-3">Welcome {{userInfo[1]}}</h4>
-<div id="carouselExampleInterval" class="carousel slide py-2 px-3" data-bs-ride="carousel" style="height:auto ;max-height:400px">
-  <div class="carousel-inner h-40" >
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-4">
+  <div>
+    <p class="text-uppercase text-success fw-semibold small mb-1">Your adventure hub</p>
+    <h1 class="h2 mb-1">Welcome, {{userInfo[1]}}</h1>
+    <p class="text-body-secondary mb-0">Find an open trek and reserve your place.</p>
+  </div>
+</div>
+<div id="carouselExampleInterval" class="carousel slide rounded overflow-hidden shadow-sm mb-4" data-bs-ride="carousel">
+  <div class="carousel-inner">
     <div class="carousel-item active"  data-bs-interval="3000">
-<img src="{{url_for('static',filename='img1.jpg')}}" style="height: auto; max-height: 400px;" class="d-block w-100" alt="i1">
+<img src="{{url_for('static',filename='img1.jpg')}}" class="d-block w-100" alt="Mountain trek">
     </div>
     <div class="carousel-item" data-bs-interval="3000">
-<img src="{{url_for('static',filename='img2.jpg')}}" style="height: auto; max-height: 400px;" class="d-block w-100" alt="i2">
+<img src="{{url_for('static',filename='img2.jpg')}}" class="d-block w-100" alt="Trek landscape">
     </div>
     <div class="carousel-item" data-bs-interval="3000">
-<img src="{{url_for('static',filename='img3.jpg')}}" style="height: auto; max-height: 400px;" class="d-block w-100" alt="i3">
+<img src="{{url_for('static',filename='img3.jpg')}}" class="d-block w-100" alt="Trail view">
     </div>
   </div>
   <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleInterval" data-bs-slide="prev">
@@ -24,9 +30,9 @@
 </div>
 <div>
 {% if aTreks %}
-  <div class="table-responsive " style="padding:10px">
+  <div class="table-responsive">
   <h5>Available Treks</h5>
-  <table class="table table-striped table-hover" style="margin-top:10px; ">
+  <table class="table table-striped table-hover align-middle mb-0">
     <thead class="table-primary">
     <tr>
         <th>Trek Name</th>

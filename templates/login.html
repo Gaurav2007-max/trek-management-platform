@@ -6,8 +6,14 @@
     <title>Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
-<body>
-    <div class="d-flex flex-column justify-content-center align-items-center vh-100">
+<body class="bg-light">
+    <main class="container py-5">
+    <div class="row justify-content-center align-items-center min-vh-100">
+    <div class="col-12 col-sm-10 col-md-7 col-lg-5">
+    <div class="text-center mb-4">
+        <h1 class="display-6 fw-semibold">TrekTerrain</h1>
+        <p class="text-body-secondary mb-0">Plan the trail. Find your next trek.</p>
+    </div>
     <div class="flash-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -37,20 +43,27 @@
             {% endif %}
         {% endwith %}
     </div>        
-    <div id="form">
+        <div id="form" class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-md-5">
+                <h2 class="h4 mb-1">Welcome back</h2>
+                <p class="text-body-secondary mb-4">Sign in to continue your journey.</p>
         <form action="/login" method="POST">
-            <label for="username">  Username</label><small class="form-text text-muted"> (Registered email is username)</small><br>
-            <input class="form-control" id="username" type="email" name="Username" required maxlength="100">
-            
-            <label for="password">Password </label>
-            <input class="form-control" id="password" type="password" name="Password" required minlength="6" maxlength="30"><br>
-            <div>
-                <button type="submit" class="btn btn-primary" value="Submit">Submit</button>
+            <div class="mb-3">
+                <label class="form-label" for="username">Email address</label>
+                <input class="form-control" id="username" type="email" name="Username" required maxlength="100" autocomplete="email">
             </div>
-        </form><br>
-        <div><a href="/register">Not Registered? Register Here</a></div>
+            <div class="mb-4">
+                <label class="form-label" for="password">Password</label>
+                <input class="form-control" id="password" type="password" name="Password" required minlength="6" maxlength="30" autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Sign in</button>
+        </form>
+        <p class="text-center text-body-secondary mt-4 mb-0">New here? <a href="/register">Create an account</a></p>
+      </div>
     </div>
     </div>
+    </div>
+    </main>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 </body>
 </html>
