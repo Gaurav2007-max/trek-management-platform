@@ -35,6 +35,6 @@ Create a Render Web Service connected to the GitHub repository and use:
 
 - Runtime: `Python 3`
 - Build command: `pip install -r requirements.txt`
-- Start command: `gunicorn app:app`
+- Start command: `gunicorn --bind 0.0.0.0:$PORT app:app`
 
 Add `FLASK_SECRET_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_CURRENCY=INR` under Render Environment Variables. Do not commit `.env` or Razorpay secrets.

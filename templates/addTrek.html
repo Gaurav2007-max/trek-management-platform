@@ -2,6 +2,11 @@
 {% block title %}Add New Trek - TrekTerrain{% endblock %}
 
 {% block content %}
+<br><br>
+<div id="form" class="d-flex flex-column justify-content-center align-items-center vh-80" >
+<form action="/addTrek" method="POST" style="width:400px">
+    <label for="TrekName">Trek Name</label><small class="form-text text-muted"> (Length should be 3-100)</small><br>
+    <input class="form-control" type="text" name="Trekname" id="TrekName" required minlength="3" maxlength="100">
 <div class="row justify-content-center">
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm rounded-4 p-4">
@@ -22,6 +27,16 @@
                     </div>
                 </div>
 
+    <label for="Difficulty">Difficulty</label>
+    <Select class="form-control" id="Difficulty" name="Difficulty">
+        <option value="" disabled selected>Select level</option>
+        <option value="Easy">Easy</option>
+        <option value="Moderate">Moderate</option>
+        <option value="Hard">Hard</option>
+    </Select>
+    
+    <label for="Location">Location</label><small class="form-text text-muted"> (Length should be 3-100)</small><br>
+    <input class="form-control" type="text" name="Location" id="Location" required minlength="3" maxlength="100">
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Location / Region</label>
@@ -33,6 +48,8 @@
                     </div>
                 </div>
 
+    <label for="Duration">Duration</label><small class="form-text text-muted"> (in hours)</small><br>
+    <input class="form-control" type="number" name="Duration" id="Duration" required min="1">
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Start Date</label>
@@ -44,6 +61,8 @@
                     </div>
                 </div>
 
+    <label for="Start">Start Date</label>
+    <input class="form-control" type="date" name="sDate" id="Start" required>
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Total Capacity (Slots)</label>
@@ -64,6 +83,26 @@
                     </div>
                 </div>
 
+    <label for="End">End Date</label><small class="form-text text-muted"> (Should be after start date)</small><br>
+    <input class="form-control" type="date" name="eDate" id="End" required>
+
+    <label for="Slot">Slots</label>
+    <input class="form-control" type="number" name="Slot" id="Slot" required min="1">
+
+    <label for="Price">Price</label><small class="form-text text-muted"> (in INR)</small><br>
+    <input class="form-control" type="number" name="Price" id="Price" required min="1" step="0.01">
+
+    <label for="Staff">Staff ID</label>
+    <select class="form-control" name="StaffId" id="Staff">
+        <option value="" selected>Id, Name (Currently unassigned)</option>
+        {% for staff in staffs %}
+        <option value="{{staff[0]}}">{{staff[0]}}, {{staff[1]}}</option>
+        {% endfor %}
+    </select>
+    <br>
+    <a class="btn btn-secondary" href="/adminTreks">Cancel</a>
+    <button class="btn btn-primary" type="submit">Submit</button>
+</form>
                 <div class="d-flex justify-content-between pt-3 border-top">
                     <a href="{{ url_for('adminTreks') }}" class="btn btn-outline-secondary px-4">Cancel</a>
                     <button type="submit" class="btn btn-success px-5 fw-bold">Create Trek</button>

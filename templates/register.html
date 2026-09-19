@@ -3,21 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <title>Create Account - TrekTerrain</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
     <style>
         body {
-            background: linear-gradient(135deg, rgba(15, 81, 50, 0.85), rgba(17, 24, 39, 0.9)), url("{{ url_for('static', filename='images/forest_trail.jpg') }}");
+            background: linear-gradient(135deg, rgba(15, 81, 50, 0.85), rgba(17, 24, 39, 0.9)), url("{{ url_for('static', filename='forest_trail.jpg') }}");
             background-size: cover;
             background-position: center;
             min-height: 100vh;
         }
     </style>
 </head>
+<body class="bg-light">
+    <main class="container py-5">
+    <div class="row justify-content-center">
+    <div class="col-12 col-md-9 col-lg-7">
+    <div class="text-center mb-4">
+        <h1 class="display-6 fw-semibold">Join TrekTerrain</h1>
+        <p class="text-body-secondary mb-0">Create an account and start exploring.</p>
+    </div>
+    <div class="flash-container ">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category == 'success' %}
+                        <div class="alert alert-success alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Success!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 <body class="d-flex align-items-center justify-content-center py-5">
     <div class="container">
         <div class="row justify-content-center">
@@ -27,6 +44,10 @@
                         <div class="display-6 text-success fw-bold">
                             <i class="bi bi-mountain"></i> TrekTerrain
                         </div>
+                    {% elif category == 'error' %}
+                        <div class="alert alert-danger alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Error!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         <p class="text-muted small">Create your TrekTerrain account today.</p>
                     </div>
 
@@ -46,11 +67,19 @@
                             <label for="fullname" class="form-label fw-semibold">Full Name</label>
                             <input type="text" class="form-control" id="fullname" name="Fullname" placeholder="John Doe" required maxlength="100">
                         </div>
+                    {% elif category == 'warning' %}
+                        <div class="alert alert-warning alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Warning!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 
                         <div class="mb-3">
                             <label for="email" class="form-label fw-semibold">Email Address</label>
                             <input type="email" class="form-control" id="email" name="Email" placeholder="john@example.com" required maxlength="100">
                         </div>
+                    {% else %}
+                        <div class="alert alert-info alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Message!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -62,7 +91,24 @@
                                 <input type="password" class="form-control" id="password2" name="Password2" placeholder="••••••••" required minlength="6" maxlength="30">
                             </div>
                         </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>     
+    <div id="form" class="card border-0 shadow-sm">
+    <div class="card-body p-4 p-md-5">
+        <h2 class="h4 mb-1">Create your account</h2>
+        <p class="text-body-secondary mb-4">All fields are required.</p>
+        <form action="/register" method="POST">
+            <div class="mb-3">
+            <label class="form-label" for="fullname">Full name</label>
+            <input class="form-control" type="text" id="fullname" name="Fullname" required minlength="1" maxlength="50" pattern="[A-Za-z ]+">
+            </div>
 
+            <div class="mb-3">
+            <label class="form-label" for="email">Email address</label>
+            <input class="form-control" type="email" id="email" name="Email" required maxlength="100" autocomplete="email">
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="contact" class="form-label fw-semibold">Contact Number</label>
@@ -88,8 +134,44 @@
                     </div>
                 </div>
             </div>
+            
+            <div class="row g-3 mb-3">
+            <div class="col-md-6">
+            <label class="form-label" for="password">Password</label>
+            <input class="form-control" type="password" id="password" name="Password" required minlength="6" maxlength="30" autocomplete="new-password">
+            </div>
+            
+            <div class="col-md-6">
+            <label class="form-label" for="password2">Confirm password</label>
+            <input class="form-control" type="password" id="password2" name="Password2" required minlength="6" maxlength="30" autocomplete="new-password">
+            </div>
+            </div>
+            
+            <div class="row g-3 mb-3">
+            <div class="col-md-6">
+            <label class="form-label" for="contact">Contact number</label>
+            <input class="form-control" type="text" id="contact" name="Contact" required pattern="[0-9]{10}" inputmode="numeric">
+            </div>
+            
+            <div class="col-md-6">
+            <label class="form-label" for="role">Account type</label>
+            <select class="form-select" name="Role" id="role" required>
+                <option value="" disabled selected>Select Role</option>
+                <option value="Staff">Trek Staff</option>
+                <option value="Trekker">Trekker</option>
+            </select>
+            </div>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Create account</button>
+        </form>
+        <p class="text-center text-body-secondary mt-4 mb-0">Already registered? <a href="/">Sign in</a></p>
         </div>
     </div>
+    </div>
+    </div>
+    </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
