@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pay for {{ trekName }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body>
+    <div class="d-flex flex-column justify-content-center align-items-center vh-100"> 
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category == 'success' %}
+                        <div class="alert alert-success alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Success!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% elif category == 'error' %}
+                        <div class="alert alert-danger alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Error!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% elif category == 'warning' %}
+                        <div class="alert alert-warning alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Warning!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info alert-dismissible fade show flash-alert" role="alert">
+                            <strong>Message!</strong> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>        
+        <div id="form">
+        <h4>{{ trekName }}</h4>
+        <p>Booking amount: INR {{ '%.2f'|format(amount / 100) }}</p>
+        <form id="payment-form" action="{{ url_for('bookTrek', TrekId=TrekId) }}" method="POST">
+            <input type="hidden" name="razorpay_payment_id" id="razorpay_payment_id">
+            <input type="hidden" name="razorpay_order_id" id="razorpay_order_id">
+            <input type="hidden" name="razorpay_signature" id="razorpay_signature">
+            <button type="button" class="btn btn-primary" id="pay-button">Pay and Book</button>
+        </form>
+        </div>
+    </div>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+        document.getElementById("pay-button").addEventListener("click", function () {
+            const checkout = new Razorpay({
+                key: "{{ razorpayKeyId }}",
+                amount: {{ amount }},
+                currency: "{{ currency }}",
+                name: "Trek Management",
+                description: "{{ trekName }} booking",
+                order_id: "{{ orderId }}",
+                handler: function (response) {
+                    document.getElementById("razorpay_payment_id").value = response.razorpay_payment_id;
+                    document.getElementById("razorpay_order_id").value = response.razorpay_order_id;
+                    document.getElementById("razorpay_signature").value = response.razorpay_signature;
+                    document.getElementById("payment-form").submit();
+                }
+            });
+            checkout.open();
+        });
+    </script>
+</body>
+</html>

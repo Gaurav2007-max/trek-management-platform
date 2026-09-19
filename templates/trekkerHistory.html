@@ -1,0 +1,35 @@
+{% extends 'trekkerLayout.html' %}
+{% block content %}
+<div class="table-responsive" style="padding:10px">
+<H4>Trekking History</H4>
+{% if trekkings %}
+<table class="table table-striped table-hover" style="margin-top:10px; ">
+    <thead class="table-primary">
+    <tr>
+        <th>S.No</th>
+        <th>Trek Name</th>
+        <th>Booked Date</th>
+        <th>Trek Date</th>
+        <th>Completion Date</th>
+        <th>Status</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for trekking in trekkings %}
+    <tr>
+        <td>{{loop.index}}</td>
+        <td>{{trekking[1]}}</td>
+        <td>{{trekking[2]}}</td>
+        <td>{{trekking[3]}}</td>
+        <td>{{trekking[4]}}</td>
+        <td>{{trekking[5]}}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<h6>No History Found</h6>
+</div>
+<a class="btn btn-primary" href="/trekkerTreks">Book Now</a>
+{% endif %}
+{% endblock %}

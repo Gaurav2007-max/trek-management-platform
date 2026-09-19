@@ -1,0 +1,59 @@
+{% extends "adminLayout.html" %}
+{% block content %}
+<br><br>
+<div id="form" class="d-flex flex-column justify-content-center align-items-center vh-80" >
+<form action="/editTrek/{{trek[0]}}" method="POST" style="width:400px">
+    <label for="TrekName">Trek Name</label><small class="form-text text-muted"> (Length should be 3-100)</small><br>
+    <input class="form-control" type="text" name="Trekname" id="TrekName" value="{{trek[1]}}" required minlength="3" maxlength="100">
+
+    <label for="Difficulty">Difficulty</label>
+    <Select class="form-control" id="Difficulty" name="Difficulty">
+        <option value="Easy" {% if trek[2]=='Easy' %}selected{% endif %}>Easy</option>
+        <option value="Moderate"{% if trek[2]=='Moderate' %}selected{% endif %}>Moderate</option>
+        <option value="Hard" {% if trek[2]=='Hard' %}selected{% endif %}>Hard</option>
+    </Select>
+    
+    <label for="Location">Location</label><small class="form-text text-muted"> (Length should be 3-100)</small><br>
+    <input class="form-control" type="text" name="Location" id="Location" value="{{trek[3]}}" required minlength="3" maxlength="100">
+
+    <label for="Duration">Duration</label><small class="form-text text-muted"> (in hours)</small><br>
+    <input class="form-control" type="number" name="Duration" id="Duration" value="{{trek[4]}}" required min="1">
+
+    <label for="Start">Start Date</label>
+    <input class="form-control" type="date" name="sDate" id="Start" value="{{trek[5]}}" required>
+
+    <label for="End">End Date</label><small class="form-text text-muted"> (Should be after start date)</small><br>
+    <input class="form-control" type="date" name="eDate" id="End" value="{{trek[6]}}" required>
+
+    <label for="Slot">Slots</label>
+    <input class="form-control" type="number" name="Slot" id="Slot" value="{{trek[7]}}" required min="1">
+
+    <label for="Price">Price</label><small class="form-text text-muted"> (in INR)</small><br>
+    <input class="form-control" type="number" name="Price" id="Price" value="{{trek[10]}}" required min="1" step="0.01">
+
+    <label for="Staff">Staff ID</label>
+    <select class="form-control" name="StaffId" id="Staff">
+        {% if trek[8] %}
+        <option value="">Id, Name (Currently unassigned)</option>
+        {% for staff in staffs %}
+        <option value="{{staff[0]}}" {% if trek[8]==staffId %}selected{% endif %}>{{staff[0]}}, {{staff[1]}}</option>
+        {% endfor %}
+        {% else %}
+        <option value="" selected>Id, Name (Currently unassigned)</option>
+        {% for staff in staffs %}
+        <option value="{{staff[0]}}">{{staff[0]}}, {{staff[1]}}</option>
+        {% endfor %}
+        {% endif %}
+    </select>
+    <label for="Staff">Status</label>
+    <select  class="form-control"  name="Status" id="Status">
+        <option value="Open" {% if trek[9] == "Open" %}selected{% endif %}>Open</option>
+        <option value="Closed" {% if trek[9] == "Closed" %}selected{% endif %}>Closed</option>
+        <option value="Ongoing" {% if trek[9] == "Ongoing" %}selected{% endif %}>Ongoing</option>
+    </select>
+    <br>
+    <a class="btn btn-secondary" href="/adminTreks">Cancel</a>
+    <button class="btn btn-primary" type="submit">Submit</button>
+</form>
+</div>
+{% endblock %}
