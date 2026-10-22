@@ -2,20 +2,6 @@
 {% block title %}My Profile - Staff{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-center align-items-center"> 
-<div class="card my-5">
-  <div class="card-body">
-    <h5 class="card-title">Name:{{Staff[1]}}</h5>
-    <h6 class="card-subtitle mb-2 text-body-secondary">Staff ID:{{Staff[0]}}</h6>
-    <p class="card-text"><div>
-        Email : {{Staff[2]}}<br>
-        Contact : {{Staff[3]}}<br>
-        Completed Treks: {{c}}
-    </div></p>
-    <a class="btn btn-primary" href="/editStaffProfile">Edit Profile</a>
-  </div>
-  </div>
-</div>
 <div class="row justify-content-center">
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm rounded-4 p-4 text-center">
@@ -29,8 +15,6 @@
                 <p class="mb-2"><strong>Contact Number:</strong> {{ Staff.Contact or 'N/A' }}</p>
                 <p class="mb-0"><strong>Completed Treks Guided:</strong> {{ c }}</p>
             </div>
-
-
 
             <a href="{{ url_for('editStaffProfile') }}" class="btn btn-primary rounded-pill py-2 fw-bold">
                 <i class="bi bi-pencil me-1"></i> Edit Profile

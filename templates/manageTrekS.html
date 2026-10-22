@@ -8,25 +8,14 @@
             <h4 class="fw-bold mb-3 text-primary"><i class="bi bi-sliders me-2"></i> Manage Trek Settings</h4>
             <div class="bg-light p-3 rounded-3 mb-4">
                 <h5 class="fw-bold mb-1">{{ trek.TrekName }}</h5>
-                <p class="text-muted small mb-0"><i class="bi bi-geo-alt text-danger me-1"></i>{{ trek.Location }} &nbsp;|&nbsp; Start: {{ trek.StartDate }}</p>
+                <p class="text-muted small mb-2"><i class="bi bi-geo-alt text-danger me-1"></i>{{ trek.Location }} &nbsp;|&nbsp; Start: {{ trek.StartDate }} &nbsp;|&nbsp; End: {{ trek.EndDate }}</p>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-secondary">Difficulty: {{ trek.Difficulty }}</span>
+                    <span class="badge bg-info text-dark">Duration: {{ trek.Duration_HRS }} hrs</span>
+                    <span class="badge bg-success">Confirmed: {{ trek.Participants }}</span>
+                </div>
             </div>
 
-{% if trek %}
-<form action="/manageTrekS/{{trek[0]}}" method="POST">
-    Trek Name: {{trek[1]}}
-    <br>
-    Difficulty: {{trek[2]}}
-    <br>
-    Location: {{trek[3]}}
-    <br>
-    Duration: {{trek[4]}}
-    <br>
-    Start Date: {{trek[5]}}
-    <br>
-    End Date: {{trek[6]}}
-    <br>
-    <label for="Slot">Slots</label>
-    <input class="form-control" type="number" name="Slot" id="Slot" value="{{trek[7]}}" required min="1">
             <form action="{{ url_for('manageTrekS', trekId=trek.TrekId) }}" method="POST">
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Total Capacity Slots</label>
@@ -34,29 +23,25 @@
                     <small class="text-muted">Current confirmed participants: {{ trek.Participants }}</small>
                 </div>
 
-    <label for="Status">Status</label>
-    <select class="form-control" name="Status" id="Status">
-        <option value="Open" {% if trek[9]=="Open" %}selected{% endif %}>Open</option>
-        <option value="Closed" {% if trek[9]=="Closed" %}selected{% endif %}>Closed</option>
-        <option value="Ongoing" {% if trek[9]=="Ongoing" %}selected{% endif %}>Ongoing</option>
-    </select>
-    {% if trek[10]!=0 %}
-    <a class="btn btn-secondary" href="/markOngoing/{{trek[0]}}">Mark as Ongoing</a>
-    <a class="btn btn-success" href="/markCompleted/{{trek[0]}}">Mark as Completed</a>
-    {% endif %}
-    <a class="btn btn-secondary" href="/assignedTreks">Cancel</a>
-    <button class="btn btn-primary" type="submit" >Save</button>
-</form>
-{% else %}
-Trek Not Found
-{% endif %}
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Status</label>
                     <select name="Status" class="form-select" required>
                         <option value="Open" {% if trek.Status=='Open' %}selected{% endif %}>Open</option>
+                        <option value="Closed" {% if trek.Status=='Closed' %}selected{% endif %}>Closed</option>
                         <option value="Ongoing" {% if trek.Status=='Ongoing' %}selected{% endif %}>Ongoing</option>
-                        <option value="Completed" {% if trek.Status=='Completed' %}selected{% endif %}>Completed</option>
                     </select>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2 mb-4">
+                    {% if trek.Status == 'Open' %}
+                    <a href="{{ url_for('markOngoing', trekId=trek.TrekId) }}" class="btn btn-info text-white btn-sm">
+                        <i class="bi bi-play-circle me-1"></i> Mark as Ongoing
+                    </a>
+                    {% elif trek.Status == 'Ongoing' %}
+                    <a href="{{ url_for('markCompleted', trekId=trek.TrekId) }}" class="btn btn-success btn-sm" onclick="return confirm('Complete this trek and move active bookings to history?');">
+                        <i class="bi bi-check2-circle me-1"></i> Mark as Completed
+                    </a>
+                    {% endif %}
                 </div>
 
                 <div class="d-flex justify-content-between pt-3 border-top">

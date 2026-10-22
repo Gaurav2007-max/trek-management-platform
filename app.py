@@ -3,7 +3,7 @@ import sqlite3
 import os
 from datetime import date, datetime
 from functools import wraps
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 from dotenv import load_dotenv
 import razorpay
 
@@ -112,12 +112,18 @@ def init_db():
         ("Sample Trekker", "trekker@example.com", "Trekker", "9999999998"),
         ("Sample Staff", "staff@example.com", "Staff", "9999999997"),
     ]
-    hashed_demo_password = generate_password_hash("15022026")
+    demo_password = "15022026"
     for full_name, email, role, contact in demo_users:
-        cursor.execute("SELECT UserId FROM User WHERE UserEmail=?", (email,))
-        if cursor.fetchone() is None:
+        cursor.execute("SELECT UserId, UserPassword FROM User WHERE UserEmail=?", (email,))
+        existing_user = cursor.fetchone()
+        if existing_user is None:
             cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, ?, ?)",
-                           (full_name, email, hashed_demo_password, role, contact))
+                           (full_name, email, demo_password, role, contact))
+        else:
+            # If demo user still has an old hash, update to plain text
+            pwd = existing_user[1]
+            if pwd and (pwd.startswith("scrypt:") or pwd.startswith("pbkdf2:")):
+                cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (demo_password, existing_user[0]))
 
     conn.commit()
     conn.close()
@@ -178,13 +184,13 @@ def login():
         if user:
             stored_password = user["UserPassword"]
             is_valid = False
-            if stored_password.startswith("scrypt:") or stored_password.startswith("pbkdf2:"):
-                is_valid = check_password_hash(stored_password, password)
-            else:
-                is_valid = (stored_password == password)
-                if is_valid:
-                    new_hashed = generate_password_hash(password)
-                    cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (new_hashed, user["UserId"]))
+            if stored_password == password:
+                is_valid = True
+            elif stored_password and (stored_password.startswith("scrypt:") or stored_password.startswith("pbkdf2:")):
+                # Migrate any legacy hash to plain text upon successful verification
+                if check_password_hash(stored_password, password):
+                    is_valid = True
+                    cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (password, user["UserId"]))
                     db.commit()
 
             if is_valid:
@@ -237,17 +243,15 @@ def register():
             flash("You have already submitted a staff request. Please wait for admin approval.", "warning")
             return redirect(url_for("register"))
 
-        hashed_pass = generate_password_hash(password)
-
         if role == "Trekker":
             cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, 'Trekker', ?)",
-                           (name, email, hashed_pass, contact))
+                           (name, email, password, contact))
             db.commit()
             flash("Successfully registered as Trekker! You can now login.", "success")
             return redirect(url_for("login"))
         elif role == "Staff":
             cursor.execute("INSERT INTO StaffReq (Name, Email, Password, Contact) VALUES (?, ?, ?, ?)",
-                           (name, email, hashed_pass, contact))
+                           (name, email, password, contact))
             db.commit()
             flash("Staff approval request sent to Admin. You can login once approved.", "success")
             return redirect(url_for("login"))
@@ -713,6 +717,8 @@ def searchBooking(x, y, s):
             cursor.execute(base_query + "WHERE u.UserId=? ORDER BY b.BookingStatus", (x,))
         else:
             cursor.execute(base_query + "WHERE u.FullName LIKE ? ORDER BY b.BookingStatus", (f"%{x}%",))
+    else:
+        cursor.execute(base_query + "ORDER BY b.BookingStatus")
 
     bookings = cursor.fetchall()
     return render_template("adminBookings.html", bookings=bookings)
@@ -733,6 +739,9 @@ def adminHistory():
                 return redirect(url_for("searchHistory", x=val, y=0, s=search_by))
             except ValueError:
                 return redirect(url_for("searchHistory", x=search_val, y=1, s=search_by))
+        else:
+            flash("Please enter search keyword.", "warning")
+            return redirect(url_for("adminHistory"))
 
     cursor.execute("SELECT * FROM History")
     trekkings = cursor.fetchall()
@@ -761,6 +770,8 @@ def searchHistory(x, y, s):
             cursor.execute("SELECT * FROM History WHERE TrekkerId=?", (x,))
         else:
             cursor.execute("SELECT * FROM History WHERE TrekkerName LIKE ?", (f"%{x}%",))
+    else:
+        cursor.execute("SELECT * FROM History")
 
     trekkings = cursor.fetchall()
     return render_template("adminHistory.html", trekkings=trekkings)
@@ -1169,9 +1180,15 @@ def verifyPayment():
         flash("Invalid booking request.", "error")
         return redirect(url_for("trekkerTreks"))
 
+    try:
+        trek_id_val = int(trek_id)
+    except (ValueError, TypeError):
+        flash("Invalid booking request.", "error")
+        return redirect(url_for("trekkerTreks"))
+
     if (razorpay_client is None
             or session.get("razorpay_order_id") != razorpay_order_id
-            or session.get("razorpay_trek_id") != int(trek_id)):
+            or session.get("razorpay_trek_id") != trek_id_val):
         flash("Payment verification failed! Please try again.", "error")
         return redirect(url_for("trekkerTreks"))
 
