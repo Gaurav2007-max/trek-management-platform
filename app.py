@@ -3,7 +3,6 @@ import sqlite3
 import os
 from datetime import date, datetime
 from functools import wraps
-from werkzeug.security import check_password_hash
 from dotenv import load_dotenv
 import razorpay
 
@@ -114,16 +113,11 @@ def init_db():
     ]
     demo_password = "15022026"
     for full_name, email, role, contact in demo_users:
-        cursor.execute("SELECT UserId, UserPassword FROM User WHERE UserEmail=?", (email,))
+        cursor.execute("SELECT UserId FROM User WHERE UserEmail=?", (email,))
         existing_user = cursor.fetchone()
         if existing_user is None:
             cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, ?, ?)",
                            (full_name, email, demo_password, role, contact))
-        else:
-            # If demo user still has an old hash, update to plain text
-            pwd = existing_user[1]
-            if pwd and (pwd.startswith("scrypt:") or pwd.startswith("pbkdf2:")):
-                cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (demo_password, existing_user[0]))
 
     conn.commit()
     conn.close()
@@ -182,18 +176,7 @@ def login():
         user = cursor.fetchone()
 
         if user:
-            stored_password = user["UserPassword"]
-            is_valid = False
-            if stored_password == password:
-                is_valid = True
-            elif stored_password and (stored_password.startswith("scrypt:") or stored_password.startswith("pbkdf2:")):
-                # Migrate any legacy hash to plain text upon successful verification
-                if check_password_hash(stored_password, password):
-                    is_valid = True
-                    cursor.execute("UPDATE User SET UserPassword=? WHERE UserId=?", (password, user["UserId"]))
-                    db.commit()
-
-            if is_valid:
+            if user["UserPassword"] == password:
                 session['UserId'] = user["UserId"]
                 session['Role'] = user["UserRole"]
                 session['FullName'] = user["FullName"]

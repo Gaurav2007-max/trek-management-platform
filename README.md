@@ -24,7 +24,7 @@ FLASK_SECRET_KEY=...
 Run locally with:
 
 ```bash
-python app.py
+python -B app.py
 ```
 
 Bookings are created only after Razorpay Checkout returns a valid payment signature. Trek prices are managed by an administrator and stored in INR.
@@ -35,6 +35,6 @@ Create a Render Web Service connected to the GitHub repository and use:
 
 - Runtime: `Python 3`
 - Build command: `pip install -r requirements.txt`
-- Start command: `gunicorn --bind 0.0.0.0:$PORT app:app`
+- Start command: `PYTHONDONTWRITEBYTECODE=1 gunicorn --bind 0.0.0.0:$PORT app:app`
 
 Add `FLASK_SECRET_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_CURRENCY=INR` under Render Environment Variables. Do not commit `.env` or Razorpay secrets.
