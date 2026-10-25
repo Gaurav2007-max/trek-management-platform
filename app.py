@@ -5,10 +5,9 @@ from datetime import date, datetime
 from functools import wraps
 from dotenv import load_dotenv
 import razorpay
+from database import DATABASE, init_db
 
 load_dotenv()
-
-DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY", "trekker_secret_key_default")
@@ -30,97 +29,6 @@ def close_db(_exception):
     db = g.pop('db', None)
     if db is not None:
         db.close()
-
-def init_db():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute("""CREATE TABLE IF NOT EXISTS User (
-        UserId INTEGER PRIMARY KEY AUTOINCREMENT,
-        FullName TEXT,
-        UserEmail TEXT UNIQUE,
-        UserPassword TEXT,
-        UserRole TEXT,
-        Contact TEXT
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
-        TrekId INTEGER PRIMARY KEY AUTOINCREMENT,
-        TrekName TEXT NOT NULL,
-        Difficulty TEXT,
-        Location TEXT,
-        Duration_HRS INTEGER,
-        StartDate DATE,
-        EndDate DATE,
-        Slot INTEGER,
-        StaffId INTEGER,
-        Status TEXT,
-        Participants INTEGER DEFAULT 0,
-        Price INTEGER DEFAULT 1500,
-        FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS Booking (
-        BookingId INTEGER PRIMARY KEY AUTOINCREMENT,
-        UserId INTEGER, 
-        TrekId INTEGER,
-        BookingStatus TEXT,
-        BookingDate DATE,
-        PaymentStatus TEXT,
-        RazorpayOrderId TEXT,
-        RazorpayPaymentId TEXT,
-        FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
-        FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS StaffReq (
-        ReqId INTEGER PRIMARY KEY AUTOINCREMENT,
-        Name TEXT,
-        Email TEXT,
-        Password TEXT,
-        Contact TEXT
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS History (
-        BookingId INTEGER,
-        TrekkerId INTEGER,
-        TrekkerName TEXT,
-        TrekId INTEGER,
-        TrekName TEXT,
-        StaffId INTEGER,
-        StaffName TEXT,
-        TrekStart DATE,
-        TrekEnd DATE,
-        BookingDate DATE,
-        Status TEXT
-    );""")
-
-    cursor.execute("PRAGMA table_info(Trek)")
-    trek_cols = [col[1] for col in cursor.fetchall()]
-    if 'Price' not in trek_cols:
-        cursor.execute("ALTER TABLE Trek ADD COLUMN Price INTEGER DEFAULT 1500;")
-
-    cursor.execute("PRAGMA table_info(Booking)")
-    booking_cols = [col[1] for col in cursor.fetchall()]
-    if 'RazorpayOrderId' not in booking_cols:
-        cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayOrderId TEXT;")
-    if 'RazorpayPaymentId' not in booking_cols:
-        cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayPaymentId TEXT;")
-
-    demo_users = [
-        ("Gaurav", "aroraganesh2007@gmail.com", "Admin", "9999999999"),
-        ("Sample Trekker", "trekker@example.com", "Trekker", "9999999998"),
-        ("Sample Staff", "staff@example.com", "Staff", "9999999997"),
-    ]
-    demo_password = "15022026"
-    for full_name, email, role, contact in demo_users:
-        cursor.execute("SELECT UserId FROM User WHERE UserEmail=?", (email,))
-        existing_user = cursor.fetchone()
-        if existing_user is None:
-            cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, ?, ?)",
-                           (full_name, email, demo_password, role, contact))
-
-    conn.commit()
-    conn.close()
 
 init_db()
 
