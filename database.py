@@ -21,6 +21,7 @@ def init_db():
     cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
         TrekId INTEGER PRIMARY KEY AUTOINCREMENT,
         TrekName TEXT NOT NULL,
+        ImagePath TEXT,
         Difficulty TEXT,
         Location TEXT,
         Duration_HRS INTEGER,
@@ -73,6 +74,19 @@ def init_db():
     trek_cols = [col[1] for col in cursor.fetchall()]
     if 'Price' not in trek_cols:
         cursor.execute("ALTER TABLE Trek ADD COLUMN Price INTEGER DEFAULT 1500;")
+    if 'ImagePath' not in trek_cols:
+        cursor.execute("ALTER TABLE Trek ADD COLUMN ImagePath TEXT;")
+
+    cursor.execute("""CREATE TABLE IF NOT EXISTS EmailVerification (
+        Email TEXT NOT NULL,
+        Purpose TEXT NOT NULL,
+        OTPHash TEXT NOT NULL,
+        ExpiresAt TEXT NOT NULL,
+        CreatedAt TEXT NOT NULL,
+        Attempts INTEGER NOT NULL DEFAULT 0,
+        Payload TEXT,
+        PRIMARY KEY (Email, Purpose)
+    );""")
 
     cursor.execute("PRAGMA table_info(Booking)")
     booking_cols = [col[1] for col in cursor.fetchall()]

@@ -31,6 +31,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>ID</th>
+                        <th>Photo</th>
                         <th>Trek Name</th>
                         <th>Difficulty</th>
                         <th>Location</th>
@@ -47,6 +48,9 @@
                     {% for t in treks %}
                     <tr>
                         <td class="fw-bold">#{{ t.TrekId }}</td>
+                        <td>
+                            <img src="{{ url_for('static', filename=t.ImagePath or 'hero_trek.jpg') }}" alt="{{ t.TrekName }}" class="rounded" style="width: 64px; height: 44px; object-fit: cover;">
+                        </td>
                         <td>{{ t.TrekName }}</td>
                         <td><span class="badge bg-secondary-subtle text-dark border">{{ t.Difficulty }}</span></td>
                         <td><i class="bi bi-geo-alt text-danger me-1"></i>{{ t.Location }}</td>
@@ -63,7 +67,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="11" class="text-center py-4 text-muted">No treks found in system.</td>
+                        <td colspan="12" class="text-center py-4 text-muted">No treks found in system.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

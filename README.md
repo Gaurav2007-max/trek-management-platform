@@ -13,13 +13,26 @@ Activate the virtual environment, then install the dependencies:
 pip install -r requirements.txt
 ```
 
-Create a local `.env` file and set the Razorpay live credentials and a strong Flask secret:
+Create a local `.env` file and set the Razorpay credentials, SMTP settings, and a strong Flask secret:
 
 ```text
 RAZORPAY_KEY_ID=...
 RAZORPAY_KEY_SECRET=...
 FLASK_SECRET_KEY=...
+MAIL_SERVER=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=...
+MAIL_PASSWORD=...
+MAIL_DEFAULT_SENDER=...
+MAIL_USE_TLS=true
 ```
+
+Configure `MAIL_SERVER`, `MAIL_PORT`, `MAIL_DEFAULT_SENDER`, and (when required by
+your provider) `MAIL_USERNAME`/`MAIL_PASSWORD` for email verification and password
+reset codes. Use `MAIL_USE_SSL=true` with the provider's SSL port (typically 465)
+instead of STARTTLS when required. Verification codes expire after 10 minutes.
+Trek photos are optional JPG, PNG, or WebP uploads (up to 5 MB) and are stored
+under `static/uploads/treks`.
 
 Run locally with:
 

@@ -6,7 +6,7 @@
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm rounded-4 p-4">
             <h4 class="fw-bold mb-3 text-primary"><i class="bi bi-pencil-square me-2"></i> Edit Trek Details</h4>
-            <form action="{{ url_for('editTrek', TrekId=trek.TrekId) }}" method="POST">
+            <form action="{{ url_for('editTrek', TrekId=trek.TrekId) }}" method="POST" enctype="multipart/form-data">
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Trek Name</label>
@@ -33,6 +33,15 @@
                     </div>
                 </div>
 
+                <div class="mb-3">
+                    {% if trek.ImagePath %}
+                    <img src="{{ url_for('static', filename=trek.ImagePath) }}" alt="{{ trek.TrekName }}" class="img-thumbnail mb-2" style="max-height: 180px;">
+                    {% endif %}
+                    <label class="form-label fw-semibold d-block" for="trekImage">Trek Photo</label>
+                    <input type="file" id="trekImage" name="TrekImage" class="form-control" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                    <div class="form-text">Optional. Choose a new JPG, PNG, or WebP photo (maximum 5 MB) to replace the current one.</div>
+                </div>
+
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Start Date</label>
@@ -52,7 +61,7 @@
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Price per Person (₹ INR)</label>
-                        <input type="number" name="Price" class="form-control" value="{{ trek.Price }}" min="100" required>
+                        <input type="number" name="Price" class="form-control" value="{{ trek.Price }}" min="100" step="0.01" required>
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Trek Status</label>
