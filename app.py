@@ -293,8 +293,32 @@ def register():
             sent = _start_email_verification(db, email, "registration", pending_registration)
         except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
             app.logger.error("Unable to send registration verification email: %s", error)
-            flash("Could not send the verification email. Check SMTP configuration and try again.", "error")
-            return redirect(url_for("register"))
+            if pending_registration["role"] == "Trekker":
+                cursor.execute(
+                    """INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact)
+                       VALUES (?, ?, ?, 'Trekker', ?)""",
+                    (
+                        pending_registration["name"],
+                        email,
+                        pending_registration["password_hash"],
+                        pending_registration["contact"],
+                    ),
+                )
+                message = "SMTP is unavailable. Your trekker account was created without email verification."
+            else:
+                cursor.execute(
+                    "INSERT INTO StaffReq (Name, Email, Password, Contact) VALUES (?, ?, ?, ?)",
+                    (
+                        pending_registration["name"],
+                        email,
+                        pending_registration["password_hash"],
+                        pending_registration["contact"],
+                    ),
+                )
+                message = "SMTP is unavailable. Your staff request was submitted without email verification."
+            db.commit()
+            flash(message, "warning")
+            return redirect(url_for("login"))
 
         flash(
             "A verification code has already been sent. Check your email."

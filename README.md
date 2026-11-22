@@ -32,6 +32,9 @@ Configure `MAIL_SERVER`, `MAIL_PORT`, `MAIL_DEFAULT_SENDER`, and (when required 
 your provider) `MAIL_USERNAME`/`MAIL_PASSWORD` for email verification and password
 reset codes. Use `MAIL_USE_SSL=true` with the provider's SSL port (typically 465)
 instead of STARTTLS when required. Verification codes expire after 10 minutes.
+If registration email delivery fails or SMTP is unavailable, the app creates the
+trekker account or staff approval request directly so project showcasing is not
+blocked. Password-reset email delivery still requires working SMTP.
 Trek photos are optional JPG, PNG, or WebP uploads (up to 5 MB) and are stored
 under `static/uploads/treks`.
 
