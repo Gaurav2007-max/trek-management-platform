@@ -1,16 +1,32 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
-import sqlite3
 import os
-from datetime import date, datetime
+import hmac
+import json
+import math
+import secrets
+import smtplib
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from email.message import EmailMessage
 from functools import wraps
 from dotenv import load_dotenv
 import razorpay
-from database import DATABASE, init_db
+from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+from cache import get_or_set
+from database import connect_database, init_db
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY", "trekker_secret_key_default")
+secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY")
+if not secret_key and os.environ.get("RENDER", "").lower() in {"1", "true", "yes"}:
+    raise RuntimeError("Set FLASK_SECRET_KEY in the Render environment.")
+app.secret_key = secret_key or secrets.token_hex(32)
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+TREK_UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "treks")
+ALLOWED_TREK_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET")
@@ -19,9 +35,7 @@ razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) i
 
 def get_db():
     if 'db' not in g:
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON;")
+        g.db = connect_database()
     return g.db
 
 @app.teardown_appcontext
@@ -30,7 +44,153 @@ def close_db(_exception):
     if db is not None:
         db.close()
 
+
+def _cached_query_rows(db, cache_key, query, parameters):
+    def load_rows():
+        cursor = db.cursor()
+        cursor.execute(query, parameters)
+        column_names = [description[0] for description in cursor.description]
+        return [
+            {name: row[name] for name in column_names}
+            for row in cursor.fetchall()
+        ]
+
+    return get_or_set(cache_key, load_rows)
+
+
 init_db()
+
+def _otp_digest(email, purpose, code):
+    return generate_password_hash(f"{email}:{purpose}:{code}")
+
+
+def _send_email_otp(email, code, purpose):
+    server = os.environ.get("MAIL_SERVER")
+    username = os.environ.get("MAIL_USERNAME")
+    password = os.environ.get("MAIL_PASSWORD")
+    sender = os.environ.get("MAIL_DEFAULT_SENDER") or username
+    if not server or not sender:
+        raise RuntimeError("SMTP is not configured. Set MAIL_SERVER and MAIL_DEFAULT_SENDER (or MAIL_USERNAME).")
+
+    message = EmailMessage()
+    message["Subject"] = "Your Crack the Trek verification code"
+    message["From"] = sender
+    message["To"] = email
+    action = "complete your registration" if purpose == "registration" else "reset your password"
+    message.set_content(
+        f"Your verification code to {action} is {code}. "
+        "It expires in 10 minutes. If you did not request this, you can ignore this email."
+    )
+
+    port = int(os.environ.get("MAIL_PORT", "587"))
+    use_ssl = os.environ.get("MAIL_USE_SSL", "").lower() in {"1", "true", "yes"}
+    use_tls = os.environ.get("MAIL_USE_TLS", "true").lower() in {"1", "true", "yes"}
+    smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+    with smtp_class(server, port, timeout=15) as smtp:
+        if use_tls and not use_ssl:
+            smtp.starttls()
+        if username:
+            smtp.login(username, password or "")
+        smtp.send_message(message)
+
+
+def _start_email_verification(db, email, purpose, payload=None):
+    now = datetime.now(timezone.utc)
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT CreatedAt FROM EmailVerification WHERE Email=? AND Purpose=?",
+        (email, purpose),
+    )
+    existing = cursor.fetchone()
+    if existing:
+        created_at = datetime.fromisoformat(existing["CreatedAt"])
+        if now - created_at < timedelta(seconds=60):
+            return False
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    cursor.execute(
+        """INSERT OR REPLACE INTO EmailVerification
+           (Email, Purpose, OTPHash, ExpiresAt, CreatedAt, Attempts, Payload)
+           VALUES (?, ?, ?, ?, ?, 0, ?)""",
+        (
+            email,
+            purpose,
+            _otp_digest(email, purpose, code),
+            (now + timedelta(minutes=10)).isoformat(),
+            now.isoformat(),
+            json.dumps(payload) if payload is not None else None,
+        ),
+    )
+    db.commit()
+    try:
+        _send_email_otp(email, code, purpose)
+    except (OSError, smtplib.SMTPException, RuntimeError, ValueError):
+        cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose=?", (email, purpose))
+        db.commit()
+        raise
+    return True
+
+
+def _check_email_verification(db, email, purpose, code):
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT * FROM EmailVerification WHERE Email=? AND Purpose=?",
+        (email, purpose),
+    )
+    verification = cursor.fetchone()
+    if not verification:
+        return None, "No active verification code was found. Request a new code."
+
+    now = datetime.now(timezone.utc)
+    if now >= datetime.fromisoformat(verification["ExpiresAt"]):
+        cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose=?", (email, purpose))
+        db.commit()
+        return None, "That verification code has expired. Request a new code."
+
+    if verification["Attempts"] >= 5:
+        cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose=?", (email, purpose))
+        db.commit()
+        return None, "Too many incorrect attempts. Request a new code."
+
+    verification_value = f"{email}:{purpose}:{code}"
+    if not check_password_hash(verification["OTPHash"], verification_value):
+        attempts = verification["Attempts"] + 1
+        if attempts >= 5:
+            cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose=?", (email, purpose))
+            db.commit()
+            return None, "Too many incorrect attempts. Request a new code."
+        cursor.execute(
+            "UPDATE EmailVerification SET Attempts=? WHERE Email=? AND Purpose=?",
+            (attempts, email, purpose),
+        )
+        db.commit()
+        return None, "Incorrect verification code."
+    return verification, None
+
+
+def _verify_password(stored_password, password):
+    if stored_password.startswith(("scrypt:", "pbkdf2:")):
+        return check_password_hash(stored_password, password)
+    return hmac.compare_digest(stored_password, password)
+
+
+def _save_trek_image():
+    image = request.files.get("TrekImage")
+    if not image or not image.filename:
+        return None
+    filename = secure_filename(image.filename)
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension not in ALLOWED_TREK_IMAGE_EXTENSIONS:
+        raise ValueError("Choose a JPG, PNG, or WebP image.")
+    os.makedirs(TREK_UPLOAD_FOLDER, exist_ok=True)
+    stored_name = f"{uuid.uuid4().hex}.{extension}"
+    image.save(os.path.join(TREK_UPLOAD_FOLDER, stored_name))
+    return f"uploads/treks/{stored_name}"
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_large_upload(_error):
+    return "Uploaded file is too large. The maximum request size is 5 MB.", 413
 
 
 def login_required(f):
@@ -71,7 +231,7 @@ def index():
 @app.route('/login', methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("Username", "").strip()
+        username = request.form.get("Username", "").strip().lower()
         password = request.form.get("Password", "").strip()
 
         if not username or not password:
@@ -84,7 +244,7 @@ def login():
         user = cursor.fetchone()
 
         if user:
-            if user["UserPassword"] == password:
+            if _verify_password(user["UserPassword"], password):
                 session['UserId'] = user["UserId"]
                 session['Role'] = user["UserRole"]
                 session['FullName'] = user["FullName"]
@@ -107,7 +267,7 @@ def login():
 def register():
     if request.method == "POST":
         name = request.form.get("Fullname", "").strip()
-        email = request.form.get("Email", "").strip()
+        email = request.form.get("Email", "").strip().lower()
         password = request.form.get("Password", "").strip()
         password2 = request.form.get("Password2", "").strip()
         contact = request.form.get("Contact", "").strip()
@@ -119,6 +279,10 @@ def register():
 
         if password != password2:
             flash("Passwords do not match", "error")
+            return redirect(url_for("register"))
+
+        if role not in {"Trekker", "Staff"}:
+            flash("Invalid role selected.", "error")
             return redirect(url_for("register"))
 
         db = get_db()
@@ -134,23 +298,141 @@ def register():
             flash("You have already submitted a staff request. Please wait for admin approval.", "warning")
             return redirect(url_for("register"))
 
-        if role == "Trekker":
-            cursor.execute("INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact) VALUES (?, ?, ?, 'Trekker', ?)",
-                           (name, email, password, contact))
-            db.commit()
-            flash("Successfully registered as Trekker! You can now login.", "success")
-            return redirect(url_for("login"))
-        elif role == "Staff":
-            cursor.execute("INSERT INTO StaffReq (Name, Email, Password, Contact) VALUES (?, ?, ?, ?)",
-                           (name, email, password, contact))
-            db.commit()
-            flash("Staff approval request sent to Admin. You can login once approved.", "success")
-            return redirect(url_for("login"))
-        else:
-            flash("Invalid role selected.", "error")
+        pending_registration = {
+            "name": name,
+            "password_hash": generate_password_hash(password),
+            "contact": contact,
+            "role": role,
+        }
+        try:
+            sent = _start_email_verification(db, email, "registration", pending_registration)
+        except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
+            app.logger.error("Unable to send registration verification email: %s", error)
+            flash("Could not send the verification email. Check SMTP configuration and try again.", "error")
             return redirect(url_for("register"))
 
+        flash(
+            "A verification code has already been sent. Check your email."
+            if not sent else "A verification code was sent to your email address.",
+            "info" if not sent else "success",
+        )
+        return redirect(url_for("verifyEmail", email=email))
+
     return render_template("register.html")
+
+
+@app.route("/verifyEmail", methods=["GET", "POST"])
+def verifyEmail():
+    email = request.values.get("email", "").strip().lower()
+    if request.method == "POST":
+        code = request.form.get("Code", "").strip()
+        if not email or not code:
+            flash("Email and verification code are required.", "warning")
+            return redirect(url_for("verifyEmail", email=email))
+
+        db = get_db()
+        verification, error = _check_email_verification(db, email, "registration", code)
+        if error:
+            flash(error, "error")
+            return redirect(url_for("verifyEmail", email=email))
+
+        payload = json.loads(verification["Payload"])
+        cursor = db.cursor()
+        cursor.execute("SELECT UserEmail FROM User WHERE UserEmail=?", (email,))
+        user_exists = cursor.fetchone()
+        cursor.execute("SELECT Email FROM StaffReq WHERE Email=?", (email,))
+        staff_request_exists = cursor.fetchone()
+        if user_exists or staff_request_exists:
+            cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose='registration'", (email,))
+            db.commit()
+            flash("Email is already registered or has a pending staff request.", "error")
+            return redirect(url_for("login"))
+
+        if payload["role"] == "Trekker":
+            cursor.execute(
+                """INSERT INTO User (FullName, UserEmail, UserPassword, UserRole, Contact)
+                   VALUES (?, ?, ?, 'Trekker', ?)""",
+                (payload["name"], email, payload["password_hash"], payload["contact"]),
+            )
+            flash("Email verified. Your trekker account is ready; please sign in.", "success")
+        else:
+            cursor.execute(
+                "INSERT INTO StaffReq (Name, Email, Password, Contact) VALUES (?, ?, ?, ?)",
+                (payload["name"], email, payload["password_hash"], payload["contact"]),
+            )
+            flash("Email verified. Your staff approval request was sent to Admin.", "success")
+        cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose='registration'", (email,))
+        db.commit()
+        return redirect(url_for("login"))
+
+    return render_template("verifyEmail.html", email=email)
+
+
+@app.route("/forgotPassword", methods=["GET", "POST"])
+def forgotPassword():
+    if request.method == "POST":
+        email = request.form.get("Email", "").strip().lower()
+        if not email:
+            flash("Enter the email address for your account.", "warning")
+            return redirect(url_for("forgotPassword"))
+
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT UserId FROM User WHERE UserEmail=?", (email,))
+        user = cursor.fetchone()
+        if user:
+            try:
+                _start_email_verification(db, email, "reset")
+            except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
+                app.logger.error("Unable to send password reset email: %s", error)
+                flash("Could not send the verification email. Check SMTP configuration and try again.", "error")
+                return redirect(url_for("forgotPassword"))
+
+        flash("If an account exists for that email, a verification code has been sent.", "info")
+        return redirect(url_for("resetPassword", email=email))
+
+    return render_template("forgotPassword.html")
+
+
+@app.route("/resetPassword", methods=["GET", "POST"])
+def resetPassword():
+    email = request.values.get("email", "").strip().lower()
+    if request.method == "POST":
+        code = request.form.get("Code", "").strip()
+        password = request.form.get("Password", "").strip()
+        password2 = request.form.get("Password2", "").strip()
+        if not email or not code or not password or not password2:
+            flash("All fields are required.", "warning")
+            return redirect(url_for("resetPassword", email=email))
+        if len(password) < 6:
+            flash("Password must be at least 6 characters long.", "error")
+            return redirect(url_for("resetPassword", email=email))
+        if password != password2:
+            flash("Passwords do not match.", "error")
+            return redirect(url_for("resetPassword", email=email))
+
+        db = get_db()
+        _, error = _check_email_verification(db, email, "reset", code)
+        if error:
+            flash(error, "error")
+            return redirect(url_for("resetPassword", email=email))
+
+        cursor = db.cursor()
+        cursor.execute(
+            "UPDATE User SET UserPassword=? WHERE UserEmail=?",
+            (generate_password_hash(password), email),
+        )
+        if cursor.rowcount == 0:
+            cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose='reset'", (email,))
+            db.commit()
+            flash("No account was found for that email address.", "error")
+            return redirect(url_for("forgotPassword"))
+        cursor.execute("DELETE FROM EmailVerification WHERE Email=? AND Purpose='reset'", (email,))
+        db.commit()
+        flash("Your password has been reset. Please sign in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("resetPassword.html", email=email)
 
 
 @app.route('/logout')
@@ -221,12 +503,12 @@ def addTrek():
         try:
             duration = int(duration)
             slot = int(slot)
-            price = int(price)
-        except ValueError:
+            price = float(price)
+        except (ValueError, TypeError):
             flash("Duration, slots, and price must be numbers.", "error")
             return redirect(url_for("addTrek"))
 
-        if duration <= 0 or slot <= 0 or price <= 0:
+        if duration <= 0 or slot <= 0 or not math.isfinite(price) or price <= 0:
             flash("Duration, slots, and price must be greater than zero.", "error")
             return redirect(url_for("addTrek"))
 
@@ -241,9 +523,15 @@ def addTrek():
                 flash("Selected staff member does not exist.", "error")
                 return redirect(url_for("addTrek"))
 
-        cursor.execute("""INSERT INTO Trek (TrekName, Difficulty, Location, Duration_HRS, StartDate, EndDate, Slot, StaffId, Status, Price) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)""",
-                       (name, difficulty, location, duration, s_date, e_date, slot, staff_val, price))
+        try:
+            image_path = _save_trek_image()
+        except ValueError as error:
+            flash(str(error), "error")
+            return redirect(url_for("addTrek"))
+
+        cursor.execute("""INSERT INTO Trek (TrekName, ImagePath, Difficulty, Location, Duration_HRS, StartDate, EndDate, Slot, StaffId, Status, Price)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Open', ?)""",
+                       (name, image_path, difficulty, location, duration, s_date, e_date, slot, staff_val, price))
         db.commit()
         flash("New Trek created successfully!", "success")
         return redirect(url_for("adminTreks"))
@@ -301,12 +589,12 @@ def editTrek(TrekId):
         try:
             duration = int(duration)
             slot = int(slot)
-            price = int(price)
-        except ValueError:
+            price = float(price)
+        except (ValueError, TypeError):
             flash("Duration, slots, and price must be numbers.", "error")
             return redirect(url_for("editTrek", TrekId=TrekId))
 
-        if duration <= 0 or slot <= 0 or price <= 0:
+        if duration <= 0 or slot <= 0 or not math.isfinite(price) or price <= 0:
             flash("Values must be greater than 0.", "error")
             return redirect(url_for("editTrek", TrekId=TrekId))
 
@@ -325,9 +613,20 @@ def editTrek(TrekId):
             return redirect(url_for("editTrek", TrekId=TrekId))
 
         staff_val = int(staff_id) if staff_id else None
+        if staff_val:
+            cursor.execute("SELECT UserId FROM User WHERE UserId=? AND UserRole='Staff'", (staff_val,))
+            if not cursor.fetchone():
+                flash("Selected staff member does not exist.", "error")
+                return redirect(url_for("editTrek", TrekId=TrekId))
 
-        cursor.execute("""UPDATE Trek SET TrekName=?, Difficulty=?, Location=?, Duration_HRS=?, StartDate=?, EndDate=?, Slot=?, StaffId=?, Status=?, Price=? WHERE TrekId=?""",
-                       (name, difficulty, location, duration, s_date, e_date, slot, staff_val, status, price, TrekId))
+        try:
+            image_path = _save_trek_image()
+        except ValueError as error:
+            flash(str(error), "error")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
+        cursor.execute("""UPDATE Trek SET TrekName=?, ImagePath=COALESCE(?, ImagePath), Difficulty=?, Location=?, Duration_HRS=?, StartDate=?, EndDate=?, Slot=?, StaffId=?, Status=?, Price=? WHERE TrekId=?""",
+                       (name, image_path, difficulty, location, duration, s_date, e_date, slot, staff_val, status, price, TrekId))
         db.commit()
         flash("Trek updated successfully!", "success")
         return redirect(url_for("adminTreks"))
@@ -910,8 +1209,12 @@ def removeParticipant(trekkerId, trekId):
 def trekkerDashboard():
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("SELECT TrekId, TrekName, Location, Difficulty, Duration_HRS, Slot - Participants as AvailableSlots, Price FROM Trek WHERE Status='Open' AND Slot - Participants > 0 LIMIT 5")
-    a_treks = cursor.fetchall()
+    a_treks = _cached_query_rows(
+        db,
+        "trekker-dashboard-treks",
+        "SELECT TrekId, TrekName, ImagePath, Location, Difficulty, Duration_HRS, Slot - Participants as AvailableSlots, Price FROM Trek WHERE Status='Open' AND Slot - Participants > 0 LIMIT 5",
+        (),
+    )
 
     user_id = session.get("UserId")
     cursor.execute("SELECT * FROM User WHERE UserId=?", (user_id,))
@@ -963,7 +1266,6 @@ def editTrekkerProfile():
 @role_required("Trekker")
 def trekkerTreks():
     db = get_db()
-    cursor = db.cursor()
     user_id = session.get("UserId")
 
     if request.method == "POST":
@@ -976,10 +1278,10 @@ def trekkerTreks():
             flash("Please specify location or difficulty filter.", "warning")
             return redirect(url_for("trekkerTreks"))
 
-        query = """SELECT t.TrekId, t.TrekName, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price 
-                   FROM Trek t 
-                   LEFT JOIN User s ON t.StaffId=s.UserId 
-                   WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
+        query = """SELECT t.TrekId, t.TrekName, t.ImagePath, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price
+                   FROM Trek t
+                   LEFT JOIN User s ON t.StaffId=s.UserId
+                   WHERE t.Status='Open' AND t.Slot - t.Participants > 0
                    AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)"""
         params = [user_id]
 
@@ -990,16 +1292,17 @@ def trekkerTreks():
             query += " AND t.Location LIKE ?"
             params.append(f"%{location}%")
 
-        cursor.execute(query, params)
-        a_treks = cursor.fetchall()
+        cache_key = json.dumps(["trekker-treks", user_id, location, difficulty])
+        a_treks = _cached_query_rows(db, cache_key, query, params)
         return render_template("trekkerTreks.html", aTreks=a_treks)
 
-    cursor.execute("""SELECT t.TrekId, t.TrekName, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price 
-                      FROM Trek t 
-                      LEFT JOIN User s ON t.StaffId=s.UserId 
-                      WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
-                      AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)""", (user_id,))
-    a_treks = cursor.fetchall()
+    query = """SELECT t.TrekId, t.TrekName, t.ImagePath, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price
+               FROM Trek t
+               LEFT JOIN User s ON t.StaffId=s.UserId
+               WHERE t.Status='Open' AND t.Slot - t.Participants > 0
+               AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)"""
+    cache_key = json.dumps(["trekker-treks", user_id, None, None])
+    a_treks = _cached_query_rows(db, cache_key, query, (user_id,))
     return render_template("trekkerTreks.html", aTreks=a_treks)
 
 

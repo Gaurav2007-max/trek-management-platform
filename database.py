@@ -1,85 +1,274 @@
 import os
+import re
 import sqlite3
 from datetime import date, timedelta
+
+from cache import invalidate_cache
 
 
 DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
 
 
+class _HybridRow:
+    def __init__(self, row):
+        self._columns = tuple(row.keys())
+        self._values = tuple(row.values())
+        self._indexes = {name: index for index, name in enumerate(self._columns)}
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return self._values[self._indexes[key]]
+
+    def keys(self):
+        return self._columns
+
+
+class _MySQLCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    @staticmethod
+    def _adapt_query(query):
+        query = re.sub(r"\bINSERT\s+OR\s+REPLACE\s+INTO\b", "REPLACE INTO", query, flags=re.IGNORECASE)
+        query = re.sub(r"\bMAX\s*\(\s*0\s*,", "GREATEST(0,", query, flags=re.IGNORECASE)
+        query = re.sub(r"(?<!`)\b(User|History)\b(?!`)", r"`\1`", query, flags=re.IGNORECASE)
+        return query.replace("?", "%s")
+
+    def execute(self, query, parameters=None):
+        self._cursor.execute(self._adapt_query(query), parameters)
+        return self
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        return _HybridRow(row) if row is not None else None
+
+    def fetchall(self):
+        return [_HybridRow(row) for row in self._cursor.fetchall()]
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+
+class _MySQLConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def cursor(self):
+        return _MySQLCursor(self._connection.cursor())
+
+    def execute(self, query, parameters=None):
+        return self.cursor().execute(query, parameters)
+
+    def commit(self):
+        self._connection.commit()
+        invalidate_cache()
+
+    def close(self):
+        self._connection.close()
+
+
+class _SQLiteConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def cursor(self):
+        return self._connection.cursor()
+
+    def execute(self, query, parameters=None):
+        if parameters is None:
+            return self._connection.execute(query)
+        return self._connection.execute(query, parameters)
+
+    def commit(self):
+        self._connection.commit()
+        invalidate_cache()
+
+    def close(self):
+        self._connection.close()
+
+
+def connect_database():
+    mysql_host = os.environ.get("MYSQL_HOST")
+    if not mysql_host:
+        connection = sqlite3.connect(DATABASE)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON;")
+        return _SQLiteConnection(connection)
+
+    import pymysql
+    from pymysql.cursors import DictCursor
+
+    connection = pymysql.connect(
+        host=mysql_host,
+        port=int(os.environ.get("MYSQL_PORT", "3306")),
+        user=os.environ["MYSQL_USER"],
+        password=os.environ["MYSQL_PASSWORD"],
+        database=os.environ["MYSQL_DATABASE"],
+        charset="utf8mb4",
+        cursorclass=DictCursor,
+    )
+    return _MySQLConnection(connection)
+
+
 def init_db():
-    conn = sqlite3.connect(DATABASE)
+    conn = connect_database()
     cursor = conn.cursor()
-    cursor.execute("""CREATE TABLE IF NOT EXISTS User (
-        UserId INTEGER PRIMARY KEY AUTOINCREMENT,
-        FullName TEXT,
-        UserEmail TEXT UNIQUE,
-        UserPassword TEXT,
-        UserRole TEXT,
-        Contact TEXT
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
-        TrekId INTEGER PRIMARY KEY AUTOINCREMENT,
-        TrekName TEXT NOT NULL,
-        Difficulty TEXT,
-        Location TEXT,
-        Duration_HRS INTEGER,
-        StartDate DATE,
-        EndDate DATE,
-        Slot INTEGER,
-        StaffId INTEGER,
-        Status TEXT,
-        Participants INTEGER DEFAULT 0,
-        Price INTEGER DEFAULT 1500,
-        FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS Booking (
-        BookingId INTEGER PRIMARY KEY AUTOINCREMENT,
-        UserId INTEGER,
-        TrekId INTEGER,
-        BookingStatus TEXT,
-        BookingDate DATE,
-        PaymentStatus TEXT,
-        RazorpayOrderId TEXT,
-        RazorpayPaymentId TEXT,
-        FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
-        FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS StaffReq (
-        ReqId INTEGER PRIMARY KEY AUTOINCREMENT,
-        Name TEXT,
-        Email TEXT,
-        Password TEXT,
-        Contact TEXT
-    );""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS History (
-        BookingId INTEGER,
-        TrekkerId INTEGER,
-        TrekkerName TEXT,
-        TrekId INTEGER,
-        TrekName TEXT,
-        StaffId INTEGER,
-        StaffName TEXT,
-        TrekStart DATE,
-        TrekEnd DATE,
-        BookingDate DATE,
-        Status TEXT
-    );""")
-
-    cursor.execute("PRAGMA table_info(Trek)")
-    trek_cols = [col[1] for col in cursor.fetchall()]
-    if 'Price' not in trek_cols:
-        cursor.execute("ALTER TABLE Trek ADD COLUMN Price INTEGER DEFAULT 1500;")
-
-    cursor.execute("PRAGMA table_info(Booking)")
-    booking_cols = [col[1] for col in cursor.fetchall()]
-    if 'RazorpayOrderId' not in booking_cols:
-        cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayOrderId TEXT;")
-    if 'RazorpayPaymentId' not in booking_cols:
-        cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayPaymentId TEXT;")
+    if os.environ.get("MYSQL_HOST"):
+        mysql_tables = [
+            """CREATE TABLE IF NOT EXISTS `User` (
+                UserId BIGINT AUTO_INCREMENT PRIMARY KEY,
+                FullName VARCHAR(255),
+                UserEmail VARCHAR(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin UNIQUE,
+                UserPassword VARCHAR(255),
+                UserRole VARCHAR(32),
+                Contact VARCHAR(64)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS Trek (
+                TrekId BIGINT AUTO_INCREMENT PRIMARY KEY,
+                TrekName VARCHAR(255) NOT NULL,
+                ImagePath TEXT,
+                Difficulty VARCHAR(64),
+                Location VARCHAR(255),
+                Duration_HRS INTEGER,
+                StartDate VARCHAR(10),
+                EndDate VARCHAR(10),
+                Slot INTEGER,
+                StaffId BIGINT NULL,
+                Status VARCHAR(32),
+                Participants INTEGER DEFAULT 0,
+                Price INTEGER DEFAULT 1500,
+                FOREIGN KEY(StaffId) REFERENCES `User`(UserId) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS Booking (
+                BookingId BIGINT AUTO_INCREMENT PRIMARY KEY,
+                UserId BIGINT,
+                TrekId BIGINT,
+                BookingStatus VARCHAR(32),
+                BookingDate VARCHAR(10),
+                PaymentStatus VARCHAR(32),
+                RazorpayOrderId VARCHAR(255),
+                RazorpayPaymentId VARCHAR(255),
+                FOREIGN KEY(UserId) REFERENCES `User`(UserId) ON DELETE CASCADE,
+                FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS StaffReq (
+                ReqId BIGINT AUTO_INCREMENT PRIMARY KEY,
+                Name VARCHAR(255),
+                Email VARCHAR(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
+                Password VARCHAR(255),
+                Contact VARCHAR(64)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS `History` (
+                BookingId BIGINT,
+                TrekkerId BIGINT,
+                TrekkerName VARCHAR(255),
+                TrekId BIGINT,
+                TrekName VARCHAR(255),
+                StaffId BIGINT,
+                StaffName VARCHAR(255),
+                TrekStart VARCHAR(10),
+                TrekEnd VARCHAR(10),
+                BookingDate VARCHAR(10),
+                Status VARCHAR(32)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+            """CREATE TABLE IF NOT EXISTS EmailVerification (
+                Email VARCHAR(320) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+                Purpose VARCHAR(32) NOT NULL,
+                OTPHash VARCHAR(255) NOT NULL,
+                ExpiresAt VARCHAR(40) NOT NULL,
+                CreatedAt VARCHAR(40) NOT NULL,
+                Attempts INTEGER NOT NULL DEFAULT 0,
+                Payload LONGTEXT,
+                PRIMARY KEY (Email, Purpose)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+        ]
+        for statement in mysql_tables:
+            cursor.execute(statement)
+    else:
+        cursor.execute("""CREATE TABLE IF NOT EXISTS User (
+            UserId INTEGER PRIMARY KEY AUTOINCREMENT,
+            FullName TEXT,
+            UserEmail TEXT UNIQUE,
+            UserPassword TEXT,
+            UserRole TEXT,
+            Contact TEXT
+        );""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS Trek (
+            TrekId INTEGER PRIMARY KEY AUTOINCREMENT,
+            TrekName TEXT NOT NULL,
+            ImagePath TEXT,
+            Difficulty TEXT,
+            Location TEXT,
+            Duration_HRS INTEGER,
+            StartDate DATE,
+            EndDate DATE,
+            Slot INTEGER,
+            StaffId INTEGER,
+            Status TEXT,
+            Participants INTEGER DEFAULT 0,
+            Price INTEGER DEFAULT 1500,
+            FOREIGN KEY(StaffId) REFERENCES User(UserId) ON DELETE SET NULL
+        );""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS Booking (
+            BookingId INTEGER PRIMARY KEY AUTOINCREMENT,
+            UserId INTEGER,
+            TrekId INTEGER,
+            BookingStatus TEXT,
+            BookingDate DATE,
+            PaymentStatus TEXT,
+            RazorpayOrderId TEXT,
+            RazorpayPaymentId TEXT,
+            FOREIGN KEY(UserId) REFERENCES User(UserId) ON DELETE CASCADE,
+            FOREIGN KEY(TrekId) REFERENCES Trek(TrekId) ON DELETE CASCADE
+        );""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS StaffReq (
+            ReqId INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name TEXT,
+            Email TEXT,
+            Password TEXT,
+            Contact TEXT
+        );""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS History (
+            BookingId INTEGER,
+            TrekkerId INTEGER,
+            TrekkerName TEXT,
+            TrekId INTEGER,
+            TrekName TEXT,
+            StaffId INTEGER,
+            StaffName TEXT,
+            TrekStart DATE,
+            TrekEnd DATE,
+            BookingDate DATE,
+            Status TEXT
+        );""")
+        cursor.execute("PRAGMA table_info(Trek)")
+        trek_cols = [col[1] for col in cursor.fetchall()]
+        if 'Price' not in trek_cols:
+            cursor.execute("ALTER TABLE Trek ADD COLUMN Price INTEGER DEFAULT 1500;")
+        if 'ImagePath' not in trek_cols:
+            cursor.execute("ALTER TABLE Trek ADD COLUMN ImagePath TEXT;")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS EmailVerification (
+            Email TEXT NOT NULL,
+            Purpose TEXT NOT NULL,
+            OTPHash TEXT NOT NULL,
+            ExpiresAt TEXT NOT NULL,
+            CreatedAt TEXT NOT NULL,
+            Attempts INTEGER NOT NULL DEFAULT 0,
+            Payload TEXT,
+            PRIMARY KEY (Email, Purpose)
+        );""")
+        cursor.execute("PRAGMA table_info(Booking)")
+        booking_cols = [col[1] for col in cursor.fetchall()]
+        if 'RazorpayOrderId' not in booking_cols:
+            cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayOrderId TEXT;")
+        if 'RazorpayPaymentId' not in booking_cols:
+            cursor.execute("ALTER TABLE Booking ADD COLUMN RazorpayPaymentId TEXT;")
 
     demo_users = [
         ("Gaurav", "aroraganesh2007@gmail.com", "Admin", "9999999999"),
@@ -195,7 +384,7 @@ def init_db():
         trekker_id, trekker_name = cursor.fetchone()
         cursor.execute("SELECT UserId, FullName FROM User WHERE UserEmail=?", (staff_email,))
         staff_id, staff_name = cursor.fetchone()
-        cursor.execute("SELECT COALESCE(MAX(BookingId), 0) + 1 FROM (SELECT BookingId FROM Booking UNION ALL SELECT BookingId FROM History)")
+        cursor.execute("SELECT COALESCE(MAX(BookingId), 0) + 1 FROM (SELECT BookingId FROM Booking UNION ALL SELECT BookingId FROM History) AS BookingIds")
         booking_id = cursor.fetchone()[0]
         cursor.execute("""INSERT INTO History (BookingId, TrekkerId, TrekkerName, TrekId, TrekName, StaffId, StaffName, TrekStart, TrekEnd, BookingDate, Status)
                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",

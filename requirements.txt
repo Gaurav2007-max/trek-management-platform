@@ -2,3 +2,6 @@ Flask>=2.3.0
 razorpay>=1.4.1
 python-dotenv>=1.0.0
 gunicorn>=21.2.0
+flask-cors
+pymysql>=1.1.0
+redis>=5.0.0
