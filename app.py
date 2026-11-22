@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g
+import sqlite3
 import os
 import hmac
 import json
@@ -14,16 +15,12 @@ import razorpay
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
-from cache import get_or_set
-from database import connect_database, init_db
+from database import DATABASE, init_db
 
 load_dotenv()
 
 app = Flask(__name__)
-secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY")
-if not secret_key and os.environ.get("RENDER", "").lower() in {"1", "true", "yes"}:
-    raise RuntimeError("Set FLASK_SECRET_KEY in the Render environment.")
-app.secret_key = secret_key or secrets.token_hex(32)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SECRET_KEY", "trekker_secret_key_default")
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 TREK_UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads", "treks")
 ALLOWED_TREK_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
@@ -35,7 +32,9 @@ razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) i
 
 def get_db():
     if 'db' not in g:
-        g.db = connect_database()
+        g.db = sqlite3.connect(DATABASE)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON;")
     return g.db
 
 @app.teardown_appcontext
@@ -43,20 +42,6 @@ def close_db(_exception):
     db = g.pop('db', None)
     if db is not None:
         db.close()
-
-
-def _cached_query_rows(db, cache_key, query, parameters):
-    def load_rows():
-        cursor = db.cursor()
-        cursor.execute(query, parameters)
-        column_names = [description[0] for description in cursor.description]
-        return [
-            {name: row[name] for name in column_names}
-            for row in cursor.fetchall()
-        ]
-
-    return get_or_set(cache_key, load_rows)
-
 
 init_db()
 
@@ -1209,12 +1194,8 @@ def removeParticipant(trekkerId, trekId):
 def trekkerDashboard():
     db = get_db()
     cursor = db.cursor()
-    a_treks = _cached_query_rows(
-        db,
-        "trekker-dashboard-treks",
-        "SELECT TrekId, TrekName, ImagePath, Location, Difficulty, Duration_HRS, Slot - Participants as AvailableSlots, Price FROM Trek WHERE Status='Open' AND Slot - Participants > 0 LIMIT 5",
-        (),
-    )
+    cursor.execute("SELECT TrekId, TrekName, ImagePath, Location, Difficulty, Duration_HRS, Slot - Participants as AvailableSlots, Price FROM Trek WHERE Status='Open' AND Slot - Participants > 0 LIMIT 5")
+    a_treks = cursor.fetchall()
 
     user_id = session.get("UserId")
     cursor.execute("SELECT * FROM User WHERE UserId=?", (user_id,))
@@ -1266,6 +1247,7 @@ def editTrekkerProfile():
 @role_required("Trekker")
 def trekkerTreks():
     db = get_db()
+    cursor = db.cursor()
     user_id = session.get("UserId")
 
     if request.method == "POST":
@@ -1279,9 +1261,9 @@ def trekkerTreks():
             return redirect(url_for("trekkerTreks"))
 
         query = """SELECT t.TrekId, t.TrekName, t.ImagePath, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price
-                   FROM Trek t
-                   LEFT JOIN User s ON t.StaffId=s.UserId
-                   WHERE t.Status='Open' AND t.Slot - t.Participants > 0
+                   FROM Trek t 
+                   LEFT JOIN User s ON t.StaffId=s.UserId 
+                   WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
                    AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)"""
         params = [user_id]
 
@@ -1292,17 +1274,16 @@ def trekkerTreks():
             query += " AND t.Location LIKE ?"
             params.append(f"%{location}%")
 
-        cache_key = json.dumps(["trekker-treks", user_id, location, difficulty])
-        a_treks = _cached_query_rows(db, cache_key, query, params)
+        cursor.execute(query, params)
+        a_treks = cursor.fetchall()
         return render_template("trekkerTreks.html", aTreks=a_treks)
 
-    query = """SELECT t.TrekId, t.TrekName, t.ImagePath, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price
-               FROM Trek t
-               LEFT JOIN User s ON t.StaffId=s.UserId
-               WHERE t.Status='Open' AND t.Slot - t.Participants > 0
-               AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)"""
-    cache_key = json.dumps(["trekker-treks", user_id, None, None])
-    a_treks = _cached_query_rows(db, cache_key, query, (user_id,))
+    cursor.execute("""SELECT t.TrekId, t.TrekName, t.ImagePath, t.Difficulty, t.Location, t.Duration_HRS, t.Slot - t.Participants as AvailableSlots, t.StartDate, t.Status, s.FullName as StaffName, s.Contact as StaffContact, t.Price
+                      FROM Trek t 
+                      LEFT JOIN User s ON t.StaffId=s.UserId 
+                      WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
+                      AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)""", (user_id,))
+    a_treks = cursor.fetchall()
     return render_template("trekkerTreks.html", aTreks=a_treks)
 
 
