@@ -37,6 +37,21 @@ def get_db():
         g.db.execute("PRAGMA foreign_keys = ON;")
     return g.db
 
+
+def _trek_booking_available(trek):
+    if trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
+        return False
+
+    try:
+        start_date = datetime.strptime(str(trek["StartDate"]).strip(), "%Y-%m-%d").date()
+        end_date = datetime.strptime(str(trek["EndDate"]).strip(), "%Y-%m-%d").date()
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+    today = date.today()
+    return start_date > today and end_date >= today
+
+
 @app.teardown_appcontext
 def close_db(_exception):
     db = g.pop('db', None)
@@ -525,6 +540,10 @@ def addTrek():
             flash("End date cannot be earlier than start date.", "error")
             return redirect(url_for("addTrek"))
 
+        if s_date <= date.today().isoformat():
+            flash("Start date must be in the future.", "error")
+            return redirect(url_for("addTrek"))
+
         staff_val = int(staff_id) if staff_id else None
         if staff_val:
             cursor.execute("SELECT UserId FROM User WHERE UserId=? AND UserRole='Staff'", (staff_val,))
@@ -609,6 +628,10 @@ def editTrek(TrekId):
 
         if e_date < s_date:
             flash("End date cannot be earlier than start date.", "error")
+            return redirect(url_for("editTrek", TrekId=TrekId))
+
+        if s_date <= date.today().isoformat():
+            flash("Start date must be in the future.", "error")
             return redirect(url_for("editTrek", TrekId=TrekId))
 
         cursor.execute("SELECT Participants FROM Trek WHERE TrekId=?", (TrekId,))
@@ -1218,7 +1241,15 @@ def removeParticipant(trekkerId, trekId):
 def trekkerDashboard():
     db = get_db()
     cursor = db.cursor()
-    cursor.execute("SELECT TrekId, TrekName, ImagePath, Location, Difficulty, Duration_HRS, Slot - Participants as AvailableSlots, Price FROM Trek WHERE Status='Open' AND Slot - Participants > 0 LIMIT 5")
+    cursor.execute(
+        """SELECT TrekId, TrekName, ImagePath, Location, Difficulty, Duration_HRS,
+                  Slot - Participants as AvailableSlots, Price
+           FROM Trek
+           WHERE Status='Open' AND Slot - Participants > 0
+             AND StartDate > ? AND EndDate >= ?
+           LIMIT 5""",
+        (date.today().isoformat(), date.today().isoformat()),
+    )
     a_treks = cursor.fetchall()
 
     user_id = session.get("UserId")
@@ -1288,8 +1319,9 @@ def trekkerTreks():
                    FROM Trek t 
                    LEFT JOIN User s ON t.StaffId=s.UserId 
                    WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
+                   AND t.StartDate > ? AND t.EndDate >= ?
                    AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)"""
-        params = [user_id]
+        params = [date.today().isoformat(), date.today().isoformat(), user_id]
 
         if difficulty:
             query += " AND t.Difficulty=?"
@@ -1306,7 +1338,9 @@ def trekkerTreks():
                       FROM Trek t 
                       LEFT JOIN User s ON t.StaffId=s.UserId 
                       WHERE t.Status='Open' AND t.Slot - t.Participants > 0 
-                      AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)""", (user_id,))
+                      AND t.StartDate > ? AND t.EndDate >= ?
+                      AND NOT EXISTS (SELECT 1 FROM Booking b WHERE t.TrekId=b.TrekId AND b.UserId=?)""",
+                   (date.today().isoformat(), date.today().isoformat(), user_id))
     a_treks = cursor.fetchall()
     return render_template("trekkerTreks.html", aTreks=a_treks)
 
@@ -1327,12 +1361,15 @@ def bookTrek(TrekId):
         flash("You have already booked this trek!", "warning")
         return redirect(url_for("bookedTreks"))
 
-    cursor.execute("SELECT TrekId, TrekName, Participants, Slot, Status, Price FROM Trek WHERE TrekId=?", (TrekId,))
+    cursor.execute(
+        "SELECT TrekId, TrekName, Participants, Slot, Status, Price, StartDate, EndDate FROM Trek WHERE TrekId=?",
+        (TrekId,),
+    )
     trek = cursor.fetchone()
     if not trek:
         return "Trek Not Found", 404
 
-    if trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
+    if not _trek_booking_available(trek):
         flash("Sorry, this trek is no longer available for booking.", "warning")
         return redirect(url_for("trekkerTreks"))
 
@@ -1405,10 +1442,13 @@ def verifyPayment():
     db = get_db()
     cursor = db.cursor()
 
-    cursor.execute("SELECT Participants, Slot, Status FROM Trek WHERE TrekId=?", (trek_id,))
+    cursor.execute(
+        "SELECT Participants, Slot, Status, StartDate, EndDate FROM Trek WHERE TrekId=?",
+        (trek_id,),
+    )
     trek = cursor.fetchone()
-    if not trek or trek["Status"] != "Open" or trek["Participants"] >= trek["Slot"]:
-        flash("Booking failed: Trek slots are full.", "error")
+    if not trek or not _trek_booking_available(trek):
+        flash("Booking failed: This trek is no longer available.", "error")
         return redirect(url_for("trekkerTreks"))
 
     cursor.execute("""INSERT INTO Booking (UserId, TrekId, BookingStatus, BookingDate, PaymentStatus, RazorpayOrderId, RazorpayPaymentId) 
