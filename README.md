@@ -58,9 +58,6 @@ Add these in the Render service's Environment settings:
 - `FLASK_SECRET_KEY`: a long, random secret
 - `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_CURRENCY=INR`
-- `MYSQL_HOST`, `MYSQL_PORT=3306`, `MYSQL_USER`, `MYSQL_PASSWORD`, and
-  `MYSQL_DATABASE` for a Hostinger MySQL database. Use the remote hostname and
-  database/user names shown in hPanel, not `localhost`.
 - `REDIS_URL` for Redis caching. Trek listings are cached, and database commits
   invalidate the cached data. If Redis is not configured or unavailable,
   caching is bypassed and the app continues to read from the database.
@@ -71,22 +68,9 @@ For local caching, run Redis locally and set
 `REDIS_URL=redis://localhost:6379/0` in `.env`; Redis is optional for local
 startup.
 
-When `MYSQL_HOST` is set, the app creates/uses its MySQL tables. Without it, the
-app continues to use SQLite locally. The SQLite database is not copied to
-Hostinger automatically; migrate any existing production data before switching.
-Do not commit `.env` or database/payment credentials.
-
-In Hostinger hPanel, create the MySQL database and user, then enable remote
-connections for the Render service's outbound IP address(es). Do not allow
-connections from all IP addresses. Render's outbound IP options depend on the
-service plan; if Hostinger cannot allowlist the IPs available to your Render
-service, a direct database connection will not work. Confirm remote MySQL
-access is enabled for your Hostinger plan before deploying.
-
-To use a Hostinger domain with the Render app, add the domain under the Render
-service's Custom Domains settings and enter the DNS records Render provides in
-Hostinger's DNS Zone Editor. The app's uploaded trek photos are stored on disk;
-Render's default filesystem is temporary, so configure persistent storage for
-`static/uploads/treks` if uploaded photos must survive redeploys.
+The app uses SQLite 3 for storage. Do not commit `.env`, database files, or
+payment credentials. This setup is suitable for project showcasing, but Render's
+default filesystem is temporary: database changes and uploaded trek photos may
+be lost after redeployments or restarts.
 
 GitHub pushes trigger Render deployments when automatic deploys are enabled.
