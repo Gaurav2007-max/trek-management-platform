@@ -169,8 +169,13 @@ def _check_email_verification(db, email, purpose, code):
 
 
 def _verify_password(stored_password, password):
+    if not isinstance(stored_password, str):
+        return False
     if stored_password.startswith(("scrypt:", "pbkdf2:")):
-        return check_password_hash(stored_password, password)
+        try:
+            return check_password_hash(stored_password, password)
+        except (ValueError, TypeError):
+            return False
     return hmac.compare_digest(stored_password, password)
 
 
@@ -245,6 +250,13 @@ def login():
 
         if user:
             if _verify_password(user["UserPassword"], password):
+                # Upgrade any remaining legacy credential on successful login.
+                if not user["UserPassword"].startswith(("scrypt:", "pbkdf2:")):
+                    cursor.execute(
+                        "UPDATE User SET UserPassword=? WHERE UserId=?",
+                        (generate_password_hash(password), user["UserId"]),
+                    )
+                    db.commit()
                 session['UserId'] = user["UserId"]
                 session['Role'] = user["UserRole"]
                 session['FullName'] = user["FullName"]

@@ -3,6 +3,7 @@ import sqlite3
 from datetime import date, timedelta
 
 from cache import invalidate_cache
+from werkzeug.security import generate_password_hash
 
 
 DATABASE = os.path.join(os.path.dirname(__file__), "TrekManagement.db")
@@ -33,6 +34,22 @@ def connect_database():
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON;")
     return _SQLiteConnection(connection)
+
+
+def _is_password_hash(value):
+    return isinstance(value, str) and value.startswith(("scrypt:", "pbkdf2:"))
+
+
+def _migrate_password_hashes(cursor):
+    """Upgrade legacy plaintext credentials in place. Safe to run on every startup."""
+    for table, column in (("User", "UserPassword"), ("StaffReq", "Password")):
+        cursor.execute(f"SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL")
+        for row_id, password in cursor.fetchall():
+            if password and not _is_password_hash(password):
+                cursor.execute(
+                    f"UPDATE {table} SET {column}=? WHERE rowid=?",
+                    (generate_password_hash(password), row_id),
+                )
 
 
 def init_db():
@@ -132,7 +149,7 @@ def init_db():
         ("Priya Menon", "priya.staff@example.com", "Staff", "9999999988"),
         ("Arjun Das", "arjun.staff@example.com", "Staff", "9999999987"),
     ]
-    demo_password = "15022026"
+    demo_password = generate_password_hash("15022026")
     for full_name, email, role, contact in demo_users:
         cursor.execute("SELECT UserId, FullName FROM User WHERE UserEmail=?", (email,))
         existing_user = cursor.fetchone()
@@ -152,6 +169,9 @@ def init_db():
         if cursor.fetchone() is None:
             cursor.execute("INSERT INTO StaffReq (Name, Email, Password, Contact) VALUES (?, ?, ?, ?)",
                            (name, email, demo_password, contact))
+
+    # Upgrade credentials created by older versions before serving authentication.
+    _migrate_password_hashes(cursor)
 
     demo_treks = [
         ("Dzongri Viewpoint Trek", "Moderate", "Sikkim", 24, 14, 18, 12, 2, "Open", 4800, "staff@example.com"),
